@@ -1,0 +1,89 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: tkm-csi-controller
+  namespace: tkm-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tkm-csi-controller
+  template:
+    metadata:
+      labels:
+        app: tkm-csi-controller
+    spec:
+      hostNetwork: false
+      serviceAccountName: tkm-csi-controller-sa
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+      containers:
+        - name: tkm-csi-plugin
+          image: quay.io/billy99/tkm-csi-plugin:latest
+          imagePullPolicy: "Always"
+          env:
+            - name: GO_LOG
+              value: info
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: TKM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-provisioner
+          image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.0
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - "-v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=30s"
+            - "--default-fstype=ext4"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-attacher
+          image: k8s.gcr.io/sig-storage/csi-attacher:v3.1.0
+          imagePullPolicy: "IfNotPresent"
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--timeout=30s"
+            - "--v=5"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+      volumes:
+        - name: socket-dir
+          emptyDir: {}

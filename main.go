@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/billy99/tkm-csi/pkg/driver"
+	"github.com/billy99/tkm-csi/pkgs/driver"
 	"go.uber.org/zap/zapcore"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -20,8 +20,10 @@ var versionInfo = flag.Bool("version", false, "Print the driver version")
 func main() {
 	var opts zap.Options
 
-	// Get the Log level for bpfman deployment where this pod is running
-	logLevel := os.Getenv("GO_LOG")
+	nodeName := strings.TrimSpace(os.Getenv("KUBE_NODE_NAME"))
+	ns := strings.TrimSpace(os.Getenv("TKM_NAMESPACE"))
+	logLevel := strings.TrimSpace(os.Getenv("GO_LOG"))
+
 	switch logLevel {
 	case "info":
 		opts = zap.Options{
@@ -46,23 +48,17 @@ func main() {
 
 	flag.Parse()
 	if *versionInfo {
-		log.Info("CSI Driver Version %s", driver.Version)
+		log.Info("CSI Driver", "Version", driver.Version)
 		return
 	}
 
-	apiURL := strings.TrimSpace(os.Getenv("TKM"))
-	apiKey := strings.TrimSpace(os.Getenv("TKM_API_KEY"))
-	region := strings.TrimSpace(os.Getenv("TKM_REGION"))
-	ns := strings.TrimSpace(os.Getenv("TKM_NAMESPACE"))
-	clusterID := strings.TrimSpace(os.Getenv("TKM_CLUSTER_ID"))
-
-	d, err := driver.NewDriver(log, apiURL, apiKey, region, ns, clusterID)
+	d, err := driver.NewDriver(log, nodeName, ns)
 	if err != nil {
 		log.Error(err, "Failed to create new Driver object")
 		return
 	}
 
-	log.Info("Created a new driver: %d", d)
+	log.Info("Created a new driver:", "driver", d)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,9 +66,10 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
+		log = ctrl.Log.WithName("tkm-csi-main")
 		log.Info("Running until SIGINT/SIGTERM received")
 		sig := <-c
-		log.Info("Received signal: %v", sig)
+		log.Info("Received signal:", "sig", sig)
 		cancel()
 	}()
 

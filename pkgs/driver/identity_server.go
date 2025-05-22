@@ -13,7 +13,7 @@ func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi
 	log.Info().Msg("Request: GetPluginInfo")
 
 	return &csi.GetPluginInfoResponse{
-		Name:          "csi.tkm.com",
+		Name:          "csi.tkm.io",
 		VendorVersion: Version,
 	}, nil
 }
@@ -57,3 +57,5 @@ func (d *Driver) Probe(context.Context, *csi.ProbeRequest) (*csi.ProbeResponse, 
 		},
 	}, nil
 }
+
+// func (d *Driver) mustEmbedUnimplementedIdentityServer() {}

@@ -12,9 +12,8 @@ import (
 	// "github.com/tkm/tkmgo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/go-logr/logr"
+	ctrl "sigs.k8s.io/controller-runtime"
 
-	// "github.com/rs/zerolog"
-	// "github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -29,60 +28,41 @@ var Version string = "0.0.1"
 const DefaultVolumeSizeGB int = 10
 
 // DefaultSocketFilename is the location of the Unix domain socket for this driver
-const DefaultSocketFilename string = "unix:///var/lib/kubelet/plugins/tkm-csi/csi.sock"
+const DefaultSocketFilename string = "unix:///var/lib/kubelet/plugins/csi-tkm/csi.sock"
+
+//const DefaultSocketFilename string = "unix:///csi/csi.sock"
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
-	// TkmClient     tkmgo.Clienter
-	// DiskHotPlugger DiskHotPlugger
-	controller     bool
 	SocketFilename string
-	NodeInstanceID string
-	Region         string
+	NodeName       string
 	Namespace      string
-	ClusterID      string
 	TestMode       bool
 	grpcServer     *grpc.Server
 	log            logr.Logger
+
+	csi.UnimplementedNodeServer
+	csi.UnimplementedControllerServer
+	csi.UnimplementedIdentityServer
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
-func NewDriver(log logr.Logger, apiURL, apiKey, region, namespace, clusterID string) (*Driver, error) {
-	// var client *tkmgo.Client
-	var err error
-
-	/*
-		if apiKey != "" {
-			client, err = tkmgo.NewClientWithURL(apiKey, apiURL, region)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		userAgent := &tkmgo.Component{
-			ID:      clusterID,
-			Name:    "tkm-csi",
-			Version: Version,
-		}
-
-		client.SetUserAgent(userAgent)
-	*/
-
+func NewDriver(log logr.Logger, nodeName, namespace string) (*Driver, error) {
 	socketFilename := os.Getenv("CSI_ENDPOINT")
 	if socketFilename == "" {
 		socketFilename = DefaultSocketFilename
 	}
 
-	log.Info("Created a new driver - api_url %s  region %v  namespace %s  cluster_id %s  socketFilename %s",
-		apiURL, region, namespace, clusterID, socketFilename)
+	log.Info("Created a new driver",
+		"nodeName", nodeName,
+		"namespace", namespace,
+		"socketFilename", socketFilename)
 
 	return &Driver{
 		// TkmClient:     client,
-		Region:    region,
+		NodeName:  nodeName,
 		Namespace: namespace,
-		ClusterID: clusterID,
 		// DiskHotPlugger: &RealDiskHotPlugger{},
-		controller:     (apiKey != ""),
 		SocketFilename: socketFilename,
 		grpcServer:     &grpc.Server{},
 		log:            log,
@@ -93,7 +73,7 @@ func NewDriver(log logr.Logger, apiURL, apiKey, region, namespace, clusterID str
 /*
 func NewTestDriver(fc *tkmgo.FakeClient) (*Driver, error) {
 	d, err := NewDriver("https://tkm-api.example.com", "NO_API_KEY_NEEDED", "TEST1", "default", "12345678")
-	d.SocketFilename = "unix:///tmp/tkm-csi.sock"
+	d.SocketFilename = "unix:///csi/csi.sock"
 	if fc != nil {
 		d.TkmClient = fc
 	} else {
@@ -111,7 +91,8 @@ func NewTestDriver(fc *tkmgo.FakeClient) (*Driver, error) {
 
 // Run the driver's gRPC server
 func (d *Driver) Run(ctx context.Context) error {
-	d.log.Info("Parsing the socket filename to make a gRPC server - socketFilename %s", d.SocketFilename)
+	d.log = ctrl.Log.WithName("tkm-csi-driver")
+	d.log.Info("Parsing the socket filename to make a gRPC server", "socketFilename", d.SocketFilename)
 	urlParts, _ := url.Parse(d.SocketFilename)
 	d.log.Info("Parsed socket filename")
 
@@ -119,17 +100,20 @@ func (d *Driver) Run(ctx context.Context) error {
 	if urlParts.Host == "" {
 		grpcAddress = filepath.FromSlash(urlParts.Path)
 	}
-	d.log.Info("Generated gRPC address")
+	d.log.Info("Generated gRPC address", "grpcAddress", grpcAddress)
 
 	// remove any existing left-over socket
 	if err := os.Remove(grpcAddress); err != nil && !os.IsNotExist(err) {
-		d.log.Error("failed to remove unix domain socket file %s, error: %s", grpcAddress, err)
+		d.log.Error(err, "failed to remove unix domain socket file", "address", grpcAddress)
 		return fmt.Errorf("failed to remove unix domain socket file %s, error: %s", grpcAddress, err)
 	}
-	d.log.Info("Removed any exsting old socket")
+	d.log.Info("Removed any existing old socket")
 
 	grpcListener, err := net.Listen(urlParts.Scheme, grpcAddress)
 	if err != nil {
+		d.log.Error(err, "failed to listen on unix domain socket file",
+			"urlParts.Scheme", urlParts.Scheme,
+			"address", grpcAddress)
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 	d.log.Info("Created gRPC listener")
@@ -138,7 +122,7 @@ func (d *Driver) Run(ctx context.Context) error {
 	errHandler := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		resp, err := handler(ctx, req)
 		if err != nil {
-			d.log.Info("method failed - method %v", info.FullMethod)
+			d.log.Info("method failed", "method", info.FullMethod)
 		}
 		return resp, err
 	}
@@ -157,7 +141,7 @@ func (d *Driver) Run(ctx context.Context) error {
 	csi.RegisterNodeServer(d.grpcServer, d)
 	d.log.Info("Registered Node server")
 
-	d.log.Info("Starting gRPC server - grpc_address %s", grpcAddress)
+	d.log.Info("Starting gRPC server", "grpc_address", grpcAddress)
 
 	var eg errgroup.Group
 
@@ -171,7 +155,7 @@ func (d *Driver) Run(ctx context.Context) error {
 		return d.grpcServer.Serve(grpcListener)
 	})
 
-	d.log.Info("Running gRPC server, waiting for a signal to quit the process... - grpc_address %s", grpcAddress)
+	d.log.Info("Running gRPC server, waiting for a signal to quit the process...", "grpc_address", grpcAddress)
 
 	return eg.Wait()
 }

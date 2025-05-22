@@ -29,7 +29,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Name must be provided")
 	}
 
-	if req.VolumeCapabilities == nil || len(req.VolumeCapabilities) == 0 {
+	if len(req.VolumeCapabilities) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Volume capabilities must be provided")
 	}
 
@@ -172,14 +172,14 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return &csi.CreateVolumeResponse{
 			Volume: &csi.Volume{
 				// VolumeId:      volume.ID,
-				VolumeId:      14567,
+				VolumeId:      "14567",
 				CapacityBytes: int64(1 /*v.SizeGigabytes*/) * BytesInGigabyte,
 			},
 		}, nil
 	}
 
 	d.log.Error(err, "TKM Volume is not 'available'")
-	return nil, status.Errorf(codes.Unavailable, "TKM Volume %q is not \"available\", state currently is %q", 14567 /*volume.ID*/, "error" /*volume.Status*/)
+	return nil, status.Errorf(codes.Unavailable, "TKM Volume %q is not \"available\", state currently is %q", "14567" /*volume.ID*/, "error" /*volume.Status*/)
 }
 
 // waitForVolumeAvailable will just sleep/loop waiting for TKM's API to report it's available, or hit a defined
@@ -413,93 +413,20 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		}
 	*/
 
-	if volume.Status == "available" {
-		d.log.V(1).Info("Volume is now available again", "volume_id", req.VolumeId /*volume.ID*/)
-		return &csi.ControllerUnpublishVolumeResponse{}, nil
-	}
-
-	// err that the the volume is not available
-	d.log.Error(fmt.Errorf("TKM Volume did not go back to 'available' status"))
-	return nil, status.Errorf(codes.Unavailable, "TKM Volume %q did not go back to \"available\", state is currently %q", req.VolumeId, "error" /*volume.Status*/)
-}
-
-// ControllerExpandVolume allows for offline expansion of Volumes
-func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
-	volID := req.GetVolumeId()
-
-	d.log.Info("Request: ControllerExpandVolume", "volume_id", volID)
-
-	if volID == "" {
-		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerExpandVolume")
-	}
+	/*
+		if volume.Status == "available" {
+	*/
+	d.log.V(1).Info("Volume is now available again", "volume_id", req.VolumeId /*volume.ID*/)
+	return &csi.ControllerUnpublishVolumeResponse{}, nil
+	/*
+		}
+	*/
 
 	/*
-		// Get the volume from the TKM API
-		volume, err := d.TkmClient.GetVolume(volID)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "ControllerExpandVolume could not retrieve existing volume: %v", err)
-		}
-
-		if req.CapacityRange == nil {
-			return nil, status.Error(codes.InvalidArgument, "must provide a capacity range to ControllerExpandVolume")
-		}
-		bytes, err := getVolSizeInBytes(req.GetCapacityRange())
-		if err != nil {
-			return nil, err
-		}
-		desiredSize := bytes / BytesInGigabyte
-		if (bytes % BytesInGigabyte) != 0 {
-			desiredSize++
-		}
-		d.log.V(1).Info("Volume found",
-			"current_size", volume.SizeGigabytes,
-			"desired_size", desiredSize,
-			"state", volume.Status)
-
-		if volume.Status == "resizing" {
-			return nil, status.Error(codes.Aborted, "volume is already being resized")
-		}
-
-		if desiredSize <= int64(volume.SizeGigabytes) {
-			d.log.Info("Volume is currently larger that desired Size", "volume_id", volID)
-			return &csi.ControllerExpandVolumeResponse{CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte, NodeExpansionRequired: true}, nil
-		}
-
-		if volume.Status != "available" {
-			return nil, status.Error(codes.FailedPrecondition, "volume is not in an availble state for OFFLINE expansion")
-		}
-
-		d.log.Info("Volume resize request sent", "size_gb", desiredSize, "volume_id", volID)
-		_, err = d.TkmClient.ResizeVolume(volID, int(desiredSize))
-		// Handles unexpected errors (e.g., API retry error or other upstream errors).
-		if err != nil {
-			d.log.Error(err, "Failed to resize volume in TKM API", "VolumeID", volID)
-			return nil, status.Errorf(codes.Internal, "cannot resize volume %s: %s", volID, err.Error())
-		}
-
-		// Resizes can take a while, double the number of normal retries
-		available, err := d.waitForVolumeStatus(volume, "available", TkmVolumeAvailableRetries*2)
-		if err != nil {
-			d.log.Error(err, "Unable to wait for volume availability in TKM API")
-			return nil, err
-		}
-
-		if !available {
-			return nil, status.Error(codes.Internal, "failed to wait for volume to be in an available state")
-		}
-
-		volume, _ = d.TkmClient.GetVolume(volID)
+		// err that the the volume is not available
+		d.log.Error(fmt.Errorf("TKM Volume did not go back to 'available' status"))
+		return nil, status.Errorf(codes.Unavailable, "TKM Volume %q did not go back to \"available\", state is currently %q", req.VolumeId, volume.Status)
 	*/
-	d.log.Info("Volume succesfully resized", "size_gb", 1 /*volume.SizeGigabytes*/, "volume_id", volID)
-	return &csi.ControllerExpandVolumeResponse{
-		CapacityBytes:         int64(1 /*volume.SizeGigabytes*/) * BytesInGigabyte,
-		NodeExpansionRequired: true,
-	}, nil
-}
-
-// ControllerGetVolume is for optional Kubernetes health checking of volumes and we don't support it yet
-func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // ValidateVolumeCapabilities returns the features of the volume, e.g. RW, RO, RWX
@@ -570,7 +497,7 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	resp.Entries = append(resp.Entries, &csi.ListVolumesResponse_Entry{
 		Volume: &csi.Volume{
 			CapacityBytes: int64(1 /*v.SizeGigabytes*/) * BytesInGigabyte,
-			VolumeId:      14567, /*v.ID*/
+			VolumeId:      "14567", /*v.ID*/
 			ContentSource: &csi.VolumeContentSource{
 				Type: &csi.VolumeContentSource_Volume{},
 			},
@@ -601,7 +528,7 @@ func (d *Driver) GetCapacity(context.Context, *csi.GetCapacityRequest) (*csi.Get
 	availableBytes := int64(1 /*quota.DiskGigabytesLimit-quota.DiskGigabytesUsage*/) * BytesInGigabyte
 	d.log.V(1).Info("Available capacity determined", "available_gb", availableBytes/BytesInGigabyte)
 	if availableBytes < BytesInGigabyte {
-		d.log.Error(fmt.Errorf("Available capacity is less than 1GB, volumes can't be launched"),
+		d.log.Error(fmt.Errorf("available capacity is less than 1GB, volumes can't be launched"),
 			"available_bytes", availableBytes)
 	}
 
@@ -773,7 +700,8 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 	if req.GetStartingToken() != "" {
 		d.log.Error(
-			fmt.Errorf("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token."))
+			fmt.Errorf("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token"),
+			"Invalid Input")
 		return nil, status.Error(codes.Aborted, "starting-token not supported")
 	}
 
@@ -879,3 +807,89 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 // 		},
 // 	}
 // }
+
+// ControllerExpandVolume allows for offline expansion of Volumes
+func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+	volID := req.GetVolumeId()
+
+	d.log.Info("Request: ControllerExpandVolume", "volume_id", volID)
+
+	if volID == "" {
+		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to ControllerExpandVolume")
+	}
+
+	/*
+		// Get the volume from the TKM API
+		volume, err := d.TkmClient.GetVolume(volID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "ControllerExpandVolume could not retrieve existing volume: %v", err)
+		}
+
+		if req.CapacityRange == nil {
+			return nil, status.Error(codes.InvalidArgument, "must provide a capacity range to ControllerExpandVolume")
+		}
+		bytes, err := getVolSizeInBytes(req.GetCapacityRange())
+		if err != nil {
+			return nil, err
+		}
+		desiredSize := bytes / BytesInGigabyte
+		if (bytes % BytesInGigabyte) != 0 {
+			desiredSize++
+		}
+		d.log.V(1).Info("Volume found",
+			"current_size", volume.SizeGigabytes,
+			"desired_size", desiredSize,
+			"state", volume.Status)
+
+		if volume.Status == "resizing" {
+			return nil, status.Error(codes.Aborted, "volume is already being resized")
+		}
+
+		if desiredSize <= int64(volume.SizeGigabytes) {
+			d.log.Info("Volume is currently larger that desired Size", "volume_id", volID)
+			return &csi.ControllerExpandVolumeResponse{CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte, NodeExpansionRequired: true}, nil
+		}
+
+		if volume.Status != "available" {
+			return nil, status.Error(codes.FailedPrecondition, "volume is not in an available state for OFFLINE expansion")
+		}
+
+		d.log.Info("Volume resize request sent", "size_gb", desiredSize, "volume_id", volID)
+		_, err = d.TkmClient.ResizeVolume(volID, int(desiredSize))
+		// Handles unexpected errors (e.g., API retry error or other upstream errors).
+		if err != nil {
+			d.log.Error(err, "Failed to resize volume in TKM API", "VolumeID", volID)
+			return nil, status.Errorf(codes.Internal, "cannot resize volume %s: %s", volID, err.Error())
+		}
+
+		// Resizes can take a while, double the number of normal retries
+		available, err := d.waitForVolumeStatus(volume, "available", TkmVolumeAvailableRetries*2)
+		if err != nil {
+			d.log.Error(err, "Unable to wait for volume availability in TKM API")
+			return nil, err
+		}
+
+		if !available {
+			return nil, status.Error(codes.Internal, "failed to wait for volume to be in an available state")
+		}
+
+		volume, _ = d.TkmClient.GetVolume(volID)
+	*/
+	d.log.Info("Volume successfully resized", "size_gb", 1 /*volume.SizeGigabytes*/, "volume_id", volID)
+	return &csi.ControllerExpandVolumeResponse{
+		CapacityBytes:         int64(1 /*volume.SizeGigabytes*/) * BytesInGigabyte,
+		NodeExpansionRequired: true,
+	}, nil
+}
+
+// ControllerGetVolume is for optional Kubernetes health checking of volumes and we don't support it yet
+func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+
+// ControllerModifyVolume modify volume
+func (d *Driver) ControllerModifyVolume(_ context.Context, _ *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+
+// func (d *Driver) mustEmbedUnimplementedControllerServer() {}
