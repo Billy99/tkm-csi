@@ -3,13 +3,9 @@ package driver
 import (
 	"context"
 	"fmt"
-	"os"
 
-	"github.com/BurntSushi/toml"
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/rs/zerolog/log"
 
-	// "github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -22,15 +18,15 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	d.log.Info("Request: NodeStageVolume", "volume_id", req.VolumeId, "staging_target_path", req.StagingTargetPath)
 
 	if req.VolumeId == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeStageVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeStageVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeStageVolume")
 	}
 	if req.StagingTargetPath == "" {
-		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodeStageVolume"))
+		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodeStageVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeStageVolume")
 	}
 	if req.VolumeCapability == nil {
-		d.log.Error(fmt.Errorf("must provide a VolumeCapability to NodeStageVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeCapability to NodeStageVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodeStageVolume")
 	}
 
@@ -82,11 +78,11 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 	d.log.Info("Request: NodeUnstageVolume", "volume_id", req.VolumeId, "staging_target_path", req.StagingTargetPath)
 
 	if req.VolumeId == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeUnstageVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeUnstageVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnstageVolume")
 	}
 	if req.StagingTargetPath == "" {
-		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodeUnstageVolume"))
+		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodeUnstageVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodeUnstageVolume")
 	}
 
@@ -120,19 +116,19 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	d.log.Info("Request: NodePublishVolume", "volume_id", req.VolumeId, "staging_target_path", req.StagingTargetPath, "target_path", req.TargetPath)
 
 	if req.VolumeId == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumeId to NodePublishVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeId to NodePublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodePublishVolume")
 	}
 	if req.StagingTargetPath == "" {
-		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodePublishVolume"))
+		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodePublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodePublishVolume")
 	}
 	if req.TargetPath == "" {
-		d.log.Error(fmt.Errorf("must provide a TargetPath to NodePublishVolume"))
+		d.log.Error(fmt.Errorf("must provide a TargetPath to NodePublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodePublishVolume")
 	}
 	if req.VolumeCapability == nil {
-		d.log.Error(fmt.Errorf("must provide a VolumeCapability to NodePublishVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeCapability to NodePublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
 
@@ -173,11 +169,11 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	d.log.Info("Request: NodeUnpublishVolume", "volume_id", req.VolumeId, "target_path", req.TargetPath)
 
 	if req.VolumeId == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeUnpublishVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeUnpublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeUnpublishVolume")
 	}
 	if req.TargetPath == "" {
-		d.log.Error(fmt.Errorf("must provide a TargetPath to NodeUnpublishVolume"))
+		d.log.Error(fmt.Errorf("must provide a TargetPath to NodeUnpublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
 	}
 
@@ -228,24 +224,15 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 
 // NodeGetInfo returns some identifier (ID, name) for the current node
 func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
-	log.Info("Request: NodeGetInfo")
-
-	nodeInstanceID, region, err := d.currentNodeDetails()
-	if err != nil {
-		log.Error(err, "Failed to get current node details")
-		return nil, status.Errorf(codes.Internal, "failed to get current node details: %s", err)
-	}
-
-	d.log.V(1).Info("Requested information about node", "node_id", nodeInstanceID, "region", region)
+	d.log.Info("Request: NodeGetInfo")
 
 	return &csi.NodeGetInfoResponse{
-		NodeId:            nodeInstanceID,
+		NodeId:            d.NodeName,
 		MaxVolumesPerNode: MaxVolumesPerNode,
 
-		// make sure that the driver works on this particular region only
 		AccessibleTopology: &csi.Topology{
 			Segments: map[string]string{
-				"region": region,
+				"region": "unknown",
 			},
 		},
 	}, nil
@@ -258,16 +245,16 @@ type VolumeStatistics struct {
 
 // NodeGetVolumeStats returns the volume capacity statistics available for the the given volume
 func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
-	log.Info("Request: NodeGetVolumeStats", "volume_id", req.VolumeId)
+	d.log.Info("Request: NodeGetVolumeStats", "volume_id", req.VolumeId)
 
 	if req.VolumeId == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeGetVolumeStats"))
+		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeGetVolumeStats"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeGetVolumeStats")
 	}
 
 	volumePath := req.VolumePath
 	if volumePath == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumePath to NodeGetVolumeStats"))
+		d.log.Error(fmt.Errorf("must provide a VolumePath to NodeGetVolumeStats"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumePath to NodeGetVolumeStats")
 	}
 
@@ -292,7 +279,7 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 
 	var stats VolumeStatistics
 
-	log.Info("Node capacity statistics retrieved",
+	d.log.Info("Node capacity statistics retrieved",
 		"bytes_available", stats.AvailableBytes,
 		"bytes_total", stats.TotalBytes,
 		"bytes_used", stats.UsedBytes,
@@ -322,11 +309,11 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	d.log.Info("Request: NodeExpandVolume", "volume_id", req.VolumeId, "target_path", req.VolumePath)
 	if req.VolumeId == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeExpandVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeExpandVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodeExpandVolume")
 	}
 	if req.VolumePath == "" {
-		d.log.Error(fmt.Errorf("must provide a VolumePath to NodeExpandVolume"))
+		d.log.Error(fmt.Errorf("must provide a VolumePath to NodeExpandVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumePath to NodeExpandVolume")
 	}
 
@@ -384,53 +371,4 @@ func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabi
 			},
 		},
 	}, nil
-}
-
-type tkmStatsdConfig struct {
-	Server     string
-	Token      string
-	Region     string
-	InstanceID string `toml:"instance_id"`
-}
-
-func (d *Driver) currentNodeDetails() (string, string, error) {
-	configFile := "/etc/tkmstatsd"
-
-	_, err := os.Stat(configFile)
-	if err != nil {
-		d.log.V(1).Info("Node details file /etc/tkmstatsd doesn't existing, using ENVironment variables")
-		return d.currentNodeDetailsFromEnv()
-	}
-
-	var config tkmStatsdConfig
-	if _, err := toml.DecodeFile(configFile, &config); err != nil {
-		d.log.V(1).Info("Node details file /etc/tkmstatsd isn't valid TOML, using ENVironment variables")
-		return d.currentNodeDetailsFromEnv()
-	}
-
-	return config.InstanceID, config.Region, nil
-}
-
-// Get the node details from the environment variables
-// NODE_ID is the ID of the node that can be used to access details from the TKM API
-// REGION is the region that the node is in
-// If NODE_ID is not set, then the KUBE_NODE_NAME is used to fetch the node using it's name
-func (d *Driver) currentNodeDetailsFromEnv() (string, string, error) {
-	if os.Getenv("NODE_ID") == "" {
-		nodeName := os.Getenv("KUBE_NODE_NAME")
-		if nodeName == "" {
-			return "", "", fmt.Errorf("NODE_ID is not set and KUBE_NODE_NAME is not set")
-		}
-
-		/*
-			instance, err := d.TkmClient.FindKubernetesClusterInstance(d.ClusterID, nodeName)
-			if err != nil {
-				return "", "", err
-			}
-			// Return the instance ID and the region
-			return instance.ID, instance.Region, nil
-		*/
-		return "", "", nil
-	}
-	return os.Getenv("NODE_ID"), os.Getenv("REGION"), nil
 }

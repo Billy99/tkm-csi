@@ -1,0 +1,28 @@
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: tkm-csi-test
+  namespace: tkm-system
+spec:
+  tolerations:
+    - key: gpu
+      operator: Equal
+      effect: NoSchedule
+      value: "true"
+  nodeSelector:
+    owner: billy
+  containers:
+  - name: alpine
+    image: alpine:3
+    imagePullPolicy: "IfNotPresent"
+    command: ["sleep", "365d"]
+    volumeMounts:
+    - name: kernel-volume
+      mountPath: "/cache"
+  volumes:
+  - name: kernel-volume
+    csi:
+      driver: csi.tkm.io
+      volumeAttributes:
+        kernel-name: kernel-x
