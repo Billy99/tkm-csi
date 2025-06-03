@@ -13,6 +13,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/go-logr/logr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -27,13 +28,11 @@ var Version string = "0.0.1"
 // DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
 const DefaultVolumeSizeGB int = 10
 
-// DefaultSocketFilename is the location of the Unix domain socket for this driver
-const DefaultSocketFilename string = "unix:///var/lib/kubelet/plugins/csi-tkm/csi.sock"
-
 //const DefaultSocketFilename string = "unix:///csi/csi.sock"
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
+	client.Client
 	SocketFilename string
 	NodeName       string
 	Namespace      string
@@ -47,25 +46,15 @@ type Driver struct {
 }
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
-func NewDriver(log logr.Logger, nodeName, namespace string) (*Driver, error) {
-	socketFilename := os.Getenv("CSI_ENDPOINT")
-	if socketFilename == "" {
-		socketFilename = DefaultSocketFilename
-	}
-
-	log.Info("Created a new driver",
-		"nodeName", nodeName,
-		"namespace", namespace,
-		"socketFilename", socketFilename)
-
+func NewDriver(log logr.Logger,
+	nodeName, namespace, socketFilename string,
+	testMode bool) (*Driver, error) {
 	return &Driver{
-		// TkmClient:     client,
-		NodeName:  nodeName,
-		Namespace: namespace,
-		// DiskHotPlugger: &RealDiskHotPlugger{},
+		NodeName:       nodeName,
+		Namespace:      namespace,
 		SocketFilename: socketFilename,
+		TestMode:       testMode,
 		grpcServer:     &grpc.Server{},
-		log:            log,
 	}, nil
 }
 

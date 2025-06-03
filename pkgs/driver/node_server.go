@@ -12,6 +12,7 @@ import (
 
 // MaxVolumesPerNode is the maximum number of volumes a single node may host
 const MaxVolumesPerNode int64 = 1024
+const TritonKernelCacheIndex string = "csi.tkm.io/tritonKernelCache"
 
 // NodeStageVolume is called after the volume is attached to the instance, so it can be partitioned, formatted and mounted to a staging path
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
@@ -113,16 +114,23 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 // NodePublishVolume bind mounts the staging path into the container
 func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	d.log.Info("Request: NodePublishVolume", "volume_id", req.VolumeId, "staging_target_path", req.StagingTargetPath, "target_path", req.TargetPath)
+	d.log.Info("Request: NodePublishVolume",
+		"VolumeId", req.VolumeId,
+		"StagingTargetPath", req.StagingTargetPath,
+		"TargetPath", req.TargetPath,
+		"VolumeCapability", req.VolumeCapability,
+		"VolumeContext", req.VolumeContext)
 
 	if req.VolumeId == "" {
 		d.log.Error(fmt.Errorf("must provide a VolumeId to NodePublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeId to NodePublishVolume")
 	}
-	if req.StagingTargetPath == "" {
-		d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodePublishVolume"), "Invalid Input")
-		return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodePublishVolume")
-	}
+	/*
+		if req.StagingTargetPath == "" {
+			d.log.Error(fmt.Errorf("must provide a StagingTargetPath to NodePublishVolume"), "Invalid Input")
+			return nil, status.Error(codes.InvalidArgument, "must provide a StagingTargetPath to NodePublishVolume")
+		}
+	*/
 	if req.TargetPath == "" {
 		d.log.Error(fmt.Errorf("must provide a TargetPath to NodePublishVolume"), "Invalid Input")
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodePublishVolume")
@@ -132,7 +140,15 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
 
-	d.log.V(1).Info("Bind-mounting volume (publishing)", "volume_id", req.VolumeId, "from_path", req.StagingTargetPath, "to_path", req.TargetPath)
+	tkcName, ok := req.VolumeContext[TritonKernelCacheIndex]
+
+	if ok {
+		d.log.Info("Looking for CRD", "TritonKernelCacheInst", tkcName)
+
+	} else {
+		d.log.Error(fmt.Errorf("must provide a TritonKernelCacheCluster"), "Invalid Input")
+		return nil, status.Error(codes.InvalidArgument, "must provide a TritonKernelCacheCluster NodePublishVolume")
+	}
 
 	/*
 		err := os.MkdirAll(req.TargetPath, 0o750)

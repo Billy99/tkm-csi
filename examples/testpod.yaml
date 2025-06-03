@@ -1,4 +1,12 @@
 ---
+apiVersion: tkm.io/v1alpha1
+kind: TritonKernelCacheCluster
+metadata:
+  name: flash-attention-rocm
+spec:
+  cacheImage: quay.io/tkm/vector-add-cache:rocm
+  validateSignature: false
+---
 kind: Pod
 apiVersion: v1
 metadata:
@@ -11,10 +19,10 @@ spec:
       effect: NoSchedule
       value: "true"
   nodeSelector:
-    owner: billy
+    tkm-test-node: "true"
   containers:
   - name: alpine
-    image: alpine:3
+    image: quay.io/fedora/fedora-minimal
     imagePullPolicy: "IfNotPresent"
     command: ["sleep", "365d"]
     volumeMounts:
@@ -25,4 +33,4 @@ spec:
     csi:
       driver: csi.tkm.io
       volumeAttributes:
-        kernel-name: kernel-x
+        csi.tkm.io/tritonKernelCache: flash-attention-rocm
