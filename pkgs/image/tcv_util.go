@@ -8,21 +8,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/billy99/tkm-csi/pkgs/constants"
 )
 
 func (s *ImageServer) initializeFilesystem() error {
-	err := os.MkdirAll(s.cacheDir, 0755)
+	err := os.MkdirAll(constants.DefaultCacheDir, 0755)
 	if err != nil {
-		s.log.Error(err, "error creating directory", "directory", s.cacheDir)
+		s.log.Error(err, "error creating directory", "directory", constants.DefaultCacheDir)
 		return err
 	}
-	s.log.V(1).Info("Successfully created directory", "directory", s.cacheDir)
+	s.log.V(1).Info("Successfully created directory", "directory", constants.DefaultCacheDir)
 	return nil
 }
 
 func (s *ImageServer) ExtractImage(ctx context.Context, cacheImage, namespace, kernelName string) error {
 	// Build command to TCV to Extract OCI Image from URL.
-	outputDir := s.cacheDir
+	outputDir := constants.DefaultCacheDir
 	if namespace != "" {
 		outputDir = filepath.Join(outputDir, namespace)
 	}
@@ -38,7 +40,7 @@ func (s *ImageServer) ExtractImage(ctx context.Context, cacheImage, namespace, k
 
 	s.log.V(1).Info("extractImage", "cacheImage", cacheImage, "outputDir", outputDir)
 
-	cmd := exec.CommandContext(ctx, s.tcvBinary, loadArgs...)
+	cmd := exec.CommandContext(ctx, constants.TcvBinary, loadArgs...)
 	stderr := &bytes.Buffer{}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = stderr

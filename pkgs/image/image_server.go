@@ -6,24 +6,23 @@ import (
 	"net"
 	"os"
 
-	pb "github.com/billy99/tkm-csi/proto"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	"github.com/billy99/tkm-csi/pkgs/constants"
+	pb "github.com/billy99/tkm-csi/proto"
 )
 
 type ImageServer struct {
 	grpcServer *grpc.Server
 	log        logr.Logger
 
-	NodeName            string
-	Namespace           string
-	ImagePort           string
-	cacheDir            string
-	clusterScopedSubDir string
-	tcvBinary           string
-	TestMode            bool
-	noGpu               bool
+	NodeName  string
+	Namespace string
+	ImagePort string
+	TestMode  bool
+	noGpu     bool
 
 	pb.UnimplementedTkmCsiServiceServer
 }
@@ -34,7 +33,7 @@ func (s *ImageServer) LoadKernelImage(ctx context.Context, req *pb.LoadKernelIma
 	if req.Namespace != nil {
 		namespace = *req.Namespace
 	} else {
-		namespace = s.clusterScopedSubDir
+		namespace = constants.ClusterScopedSubDir
 	}
 
 	s.log.Info("Received Load Kernel Image Request",
@@ -60,22 +59,19 @@ func (s *ImageServer) UnloadKernelImage(ctx context.Context, req *pb.UnloadKerne
 // NewImageServer returns an ImageServer instance that implements gRPC endpoints
 // for TKM to manage Triton Kernel Caches that are loaded via OCI Images.
 func NewImageServer(
-	nodeName, namespace, imagePort, cacheDir, clusterScopedSubDir, tcvBinary string,
+	nodeName, namespace, imagePort string,
 	noGpu bool) (*ImageServer, error) {
 
-	if !fileExists(tcvBinary) {
-		return nil, fmt.Errorf("TCV must be installed", "location", tcvBinary)
+	if !fileExists(constants.TcvBinary) {
+		return nil, fmt.Errorf("TCV must be installed", "location", constants.TcvBinary)
 	}
 
 	return &ImageServer{
-		grpcServer:          grpc.NewServer(),
-		NodeName:            nodeName,
-		Namespace:           namespace,
-		ImagePort:           imagePort,
-		cacheDir:            cacheDir,
-		clusterScopedSubDir: clusterScopedSubDir,
-		tcvBinary:           tcvBinary,
-		noGpu:               noGpu,
+		grpcServer: grpc.NewServer(),
+		NodeName:   nodeName,
+		Namespace:  namespace,
+		ImagePort:  imagePort,
+		noGpu:      noGpu,
 	}, nil
 }
 

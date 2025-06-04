@@ -3,16 +3,22 @@ package driver
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/billy99/tkm-csi/pkgs/constants"
 )
 
 // MaxVolumesPerNode is the maximum number of volumes a single node may host
 const MaxVolumesPerNode int64 = 1024
 const TritonKernelCacheIndex string = "csi.tkm.io/tritonKernelCache"
+const TritonKernelCacheNamespaceIndex string = "csi.tkm.io/namespace"
 
 // NodeStageVolume is called after the volume is attached to the instance, so it can be partitioned, formatted and mounted to a staging path
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
@@ -114,6 +120,8 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 // NodePublishVolume bind mounts the staging path into the container
 func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+	var sourcePath string
+
 	d.log.Info("Request: NodePublishVolume",
 		"VolumeId", req.VolumeId,
 		"StagingTargetPath", req.StagingTargetPath,
@@ -140,44 +148,97 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 		return nil, status.Error(codes.InvalidArgument, "must provide a VolumeCapability to NodePublishVolume")
 	}
 
-	tkcName, ok := req.VolumeContext[TritonKernelCacheIndex]
-
-	if ok {
-		d.log.Info("Looking for CRD", "TritonKernelCacheInst", tkcName)
-
-	} else {
-		d.log.Error(fmt.Errorf("must provide a TritonKernelCacheCluster"), "Invalid Input")
-		return nil, status.Error(codes.InvalidArgument, "must provide a TritonKernelCacheCluster NodePublishVolume")
+	clusterScoped := false
+	tkcNamespace, ok := req.VolumeContext[TritonKernelCacheNamespaceIndex]
+	if !ok {
+		// Namespace is not required. If not provided, then assume it is a Cluster scoped
+		// TritonKernelCache instance.
+		tkcNamespace = constants.ClusterScopedSubDir
+		clusterScoped = true
 	}
 
-	/*
-		err := os.MkdirAll(req.TargetPath, 0o750)
-		if err != nil {
-			d.log.Error(err, "Failed to create target path", "volume_id", req.VolumeId, "targetPath", req.TargetPath)
-			return nil, err
+	tkcName, ok := req.VolumeContext[TritonKernelCacheIndex]
+	if !ok {
+		if clusterScoped {
+			d.log.Error(fmt.Errorf("must provide a TritonKernelCacheCluster"), "Invalid Input")
+			return nil, status.Error(codes.InvalidArgument, "must provide a TritonKernelCacheCluster NodePublishVolume")
+		} else {
+			d.log.Error(fmt.Errorf("must provide a TritonKernelCache"), "Invalid Input")
+			return nil, status.Error(codes.InvalidArgument, "must provide a TritonKernelCache NodePublishVolume")
+		}
+	}
+
+	sourcePath = constants.DefaultCacheDir
+	sourcePath = filepath.Join(sourcePath, tkcNamespace)
+	sourcePath = filepath.Join(sourcePath, tkcName)
+	if _, err := os.Stat(sourcePath); err != nil {
+		if os.IsNotExist(err) {
+			if clusterScoped {
+				d.log.Error(fmt.Errorf("TritonKernelCacheCluster has not been created"), "name", tkcName)
+				return nil, status.Error(codes.InvalidArgument, "TritonKernelCacheCluster has not been created NodePublishVolume")
+			} else {
+				d.log.Error(fmt.Errorf("TritonKernelCache has not been created"), "name", tkcName, "namespace", tkcNamespace)
+				return nil, status.Error(codes.InvalidArgument, "TritonKernelCache has not been created NodePublishVolume")
+			}
+		} else {
+			d.log.Error(fmt.Errorf("unable to verify sourcePath"), "sourcePath", sourcePath)
+			return nil, status.Error(codes.InvalidArgument, "unable to verify sourcePath")
+		}
+	}
+	d.log.Info("Found TritonKernelCache CRD", "sourcePath", sourcePath)
+
+	err := os.MkdirAll(req.TargetPath, 0o750)
+	if err != nil {
+		d.log.Error(err, "Failed to create target path", "volume_id", req.VolumeId, "targetPath", req.TargetPath)
+		return nil, err
+	}
+
+	mounted, err := isBindMounted(sourcePath)
+	if err != nil {
+		d.log.Error(fmt.Errorf("unable to verify if sourcePath already mounted"), "sourcePath", sourcePath)
+		return nil, status.Error(codes.InvalidArgument, "unable to verify if sourcePath already mounted")
+	}
+
+	// Mount options
+	if !mounted {
+		d.log.Info("bind mounting kernel cache", "sourcePath", sourcePath, "targetPath", req.TargetPath)
+
+		mountOptions := []string{"bind"}
+		if req.GetReadonly() {
+			mountOptions = append(mountOptions, "ro")
 		}
 
-		d.log.V(1).Info("Ensuring target path exists", "volume_id", req.VolumeId, "targetPath", req.TargetPath)
-		// Mount the volume if not already mounted
-		mounted, err := d.DiskHotPlugger.IsMounted(req.TargetPath)
+		// Perform the bind mount
+		cmd := exec.Command("mount", "-o", fmt.Sprintf("%s", joinOptions(mountOptions)), "--bind", sourcePath, req.TargetPath)
+		out, err := cmd.CombinedOutput()
 		if err != nil {
-			d.log.Error(err, "Mounted check errored", "path", req.TargetPath)
-			return nil, err
+			return nil, status.Errorf(codes.Internal, "mount failed: %v, output: %s", err, string(out))
 		}
-		d.log.V(1).Info("Checking if currently mounting", "volume_id", req.VolumeId, "mounted", mounted)
-
-		if !mounted {
-			options := []string{
-				"bind",
-			}
-			if req.Readonly {
-				options = append(options, "ro")
-			}
-			d.DiskHotPlugger.Mount(req.StagingTargetPath, req.TargetPath, "ext4", options...)
-		}
-	*/
+	} else {
+		d.log.Info("kernel cache already bind mounted", "sourcePath", sourcePath, "targetPath", req.TargetPath)
+	}
 
 	return &csi.NodePublishVolumeResponse{}, nil
+}
+
+func isBindMounted(dir string) (bool, error) {
+	content, err := os.ReadFile("/proc/mounts")
+	if err != nil {
+		return false, fmt.Errorf("failed to read /proc/mounts: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) >= 6 && fields[2] == dir && fields[4] == "bind" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func joinOptions(opts []string) string {
+	return filepath.Clean(fmt.Sprintf("%s", opts))
 }
 
 // NodeUnpublishVolume removes the bind mount

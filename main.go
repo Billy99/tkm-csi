@@ -8,34 +8,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/billy99/tkm-csi/pkgs/driver"
-	"github.com/billy99/tkm-csi/pkgs/image"
 	"github.com/go-logr/logr"
 	"go.uber.org/zap/zapcore"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-)
 
-const (
-	// DefaultSocketFilename is the location of the Unix domain socket for this CSI driver
-	// for Kubelet to send requests.
-	DefaultSocketFilename string = "unix:///var/lib/kubelet/plugins/csi-tkm/csi.sock"
-
-	// DefaultImagePort is the location of port the Image Server will listen on for TKM
-	// to send requests.
-	DefaultImagePort string = ":50051"
-
-	// DefaultCacheDir is the default root directory to store the expanded the Triton Kernel
-	// images.
-	DefaultCacheDir = "/run/tkm/caches"
-
-	// DefaultCacheDir is the default root directory to store the expanded the Triton Kernel
-	// images.
-	ClusterScopedSubDir = "cluster-scoped"
-
-	// TcvBinary is the location on the host of the TCV binary.
-	TcvBinary = "/usr/sbin/tcv"
+	"github.com/billy99/tkm-csi/pkgs/constants"
+	"github.com/billy99/tkm-csi/pkgs/driver"
+	"github.com/billy99/tkm-csi/pkgs/image"
 )
 
 var versionInfo = flag.Bool("version", false, "Print the driver version")
@@ -58,11 +38,11 @@ func main() {
 	}
 	socketFilename := os.Getenv("CSI_ENDPOINT")
 	if socketFilename == "" {
-		socketFilename = DefaultSocketFilename
+		socketFilename = constants.DefaultSocketFilename
 	}
 	imagePort := os.Getenv("CSI_IMAGE_SERVER_PORT")
 	if imagePort == "" {
-		imagePort = DefaultImagePort
+		imagePort = constants.DefaultImagePort
 	}
 
 	// Parse command line variables
@@ -86,7 +66,7 @@ func main() {
 	log.Info("Created a new driver:", "driver", d)
 
 	// Setup Image Server, which receives OCI Image management requests from TKM
-	s, err := image.NewImageServer(nodeName, ns, imagePort, DefaultCacheDir, ClusterScopedSubDir, TcvBinary, *noGpu)
+	s, err := image.NewImageServer(nodeName, ns, imagePort, constants.TcvBinary, *noGpu)
 	if err != nil {
 		log.Error(err, "Failed to create new Image Server object")
 		return
