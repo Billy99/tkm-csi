@@ -1,4 +1,4 @@
-package contants
+package constants
 
 const (
 	// DefaultSocketFilename is the location of the Unix domain socket for this CSI driver

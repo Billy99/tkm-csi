@@ -62,7 +62,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
             - name: tkm-runtime
-              mountPath: /run/bpfman
+              mountPath: /run/tkm
               mountPropagation: Bidirectional
             - name: etc-dir
               mountPath: /etc
@@ -126,9 +126,7 @@ spec:
         - name: tkm-runtime
           hostPath:
             path: /run/tkm
-        - name: runtime
-          hostPath:
-            path: /run/bpfman
+            type: DirectoryOrCreate
         - name: pods-mount-dir
           hostPath:
             path: /var/lib/kubelet/pods

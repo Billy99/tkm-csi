@@ -12,6 +12,7 @@ import (
 	// "github.com/tkm/tkmgo"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/go-logr/logr"
+	"k8s.io/mount-utils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,17 +29,23 @@ var Version string = "0.0.1"
 // DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
 const DefaultVolumeSizeGB int = 10
 
-//const DefaultSocketFilename string = "unix:///csi/csi.sock"
+type CacheData struct {
+	KernelName    string
+	Namespace     string
+	ClusterScoped bool
+}
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
 	client.Client
-	SocketFilename string
-	NodeName       string
-	Namespace      string
-	TestMode       bool
-	grpcServer     *grpc.Server
-	log            logr.Logger
+	SocketFilename  string
+	NodeName        string
+	Namespace       string
+	TestMode        bool
+	mounter         mount.Interface
+	grpcServer      *grpc.Server
+	log             logr.Logger
+	volumeIdMapping map[string]CacheData
 
 	csi.UnimplementedNodeServer
 	csi.UnimplementedControllerServer
@@ -50,11 +57,13 @@ func NewDriver(log logr.Logger,
 	nodeName, namespace, socketFilename string,
 	testMode bool) (*Driver, error) {
 	return &Driver{
-		NodeName:       nodeName,
-		Namespace:      namespace,
-		SocketFilename: socketFilename,
-		TestMode:       testMode,
-		grpcServer:     &grpc.Server{},
+		NodeName:        nodeName,
+		Namespace:       namespace,
+		SocketFilename:  socketFilename,
+		TestMode:        testMode,
+		grpcServer:      &grpc.Server{},
+		mounter:         mount.New(""),
+		volumeIdMapping: map[string]CacheData{},
 	}, nil
 }
 

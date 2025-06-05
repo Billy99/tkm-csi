@@ -12,11 +12,12 @@ COPY go.sum go.sum
 COPY main.go main.go
 COPY pkgs/ pkgs/
 COPY proto/ proto/
+COPY test/ test/
 COPY vendor/ vendor/
 COPY Makefile Makefile
 
 # Build the TKM CSI Driver binary.
-RUN make build-csi
+RUN make build
 
 
 FROM golang:1.24 AS tcv-builder
@@ -47,11 +48,18 @@ RUN make build
 # be able to easily install extra packages.
 FROM quay.io/fedora/fedora-minimal
 
+RUN dnf update && dnf install -y \
+    gpgme-devel \
+    libbtrfs \
+ && dnf clean all
+
 # Copy the binary from the builder
 COPY --from=csi-builder /workspace/bin/tkm-csi-plugin /usr/sbin/.
+COPY --from=csi-builder /workspace/bin/tkm-agent-stub /usr/sbin/.
 COPY --from=tcv-builder /workspace/TKDK/tcv/_output/bin/linux_amd64/tcv /usr/sbin/.
+ENV PATH="$PATH:/usr/sbin"
 
 # Run as non-root user
 USER 65532:65532
 
-ENTRYPOINT ["tkm-csi-plugin"]
+ENTRYPOINT ["tkm-csi-plugin", "--nogpu"]

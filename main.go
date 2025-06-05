@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -57,6 +58,9 @@ func main() {
 		return
 	}
 
+	_, err := exec.LookPath("tcv")
+	log.Info("cmdExists", "cmd", constants.TcvBinary, "err", err)
+
 	// Setup CSI Driver, which receives CSI requests from Kubelet
 	d, err := driver.NewDriver(log, nodeName, ns, socketFilename, *testMode)
 	if err != nil {
@@ -66,7 +70,7 @@ func main() {
 	log.Info("Created a new driver:", "driver", d)
 
 	// Setup Image Server, which receives OCI Image management requests from TKM
-	s, err := image.NewImageServer(nodeName, ns, imagePort, constants.TcvBinary, *noGpu)
+	s, err := image.NewImageServer(nodeName, ns, imagePort, *noGpu)
 	if err != nil {
 		log.Error(err, "Failed to create new Image Server object")
 		return

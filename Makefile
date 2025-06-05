@@ -110,7 +110,7 @@ deploy: ## Deploy CSI Controller and Node to K8s cluster specified in ~/.kube/co
 	kubectl apply -f manifests/rbac-node.yaml
 	@echo "Deploying CSI Node Daemonset."
 	kubectl apply -f manifests/node-plugin.yaml
-	@echo "Add label tkm-test-node= to node kind-gpu-sim-worker.""
+	@echo "Add label tkm-test-node= to node kind-gpu-sim-worker."
 	kubectl label node kind-gpu-sim-worker tkm-test-node=true
 	@echo "Deployment of CSI to cluster completed."
 

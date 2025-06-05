@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+	"syscall"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
@@ -43,7 +42,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		// Find the disk attachment location
 		attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 		if attachedDiskPath == "" {
-			d.log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"), "volume_id", req.VolumeId)
+			d.log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"), "Invalid Input", "volume_id", req.VolumeId)
 			return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 		}
 
@@ -120,8 +119,6 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 
 // NodePublishVolume bind mounts the staging path into the container
 func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	var sourcePath string
-
 	d.log.Info("Request: NodePublishVolume",
 		"VolumeId", req.VolumeId,
 		"StagingTargetPath", req.StagingTargetPath,
@@ -168,82 +165,81 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 		}
 	}
 
-	sourcePath = constants.DefaultCacheDir
+	sourcePath := constants.DefaultCacheDir
 	sourcePath = filepath.Join(sourcePath, tkcNamespace)
 	sourcePath = filepath.Join(sourcePath, tkcName)
 	if _, err := os.Stat(sourcePath); err != nil {
 		if os.IsNotExist(err) {
 			if clusterScoped {
-				d.log.Error(fmt.Errorf("TritonKernelCacheCluster has not been created"), "name", tkcName)
+				d.log.Error(fmt.Errorf("TritonKernelCacheCluster has not been created"), "Invalid Input", "name", tkcName)
 				return nil, status.Error(codes.InvalidArgument, "TritonKernelCacheCluster has not been created NodePublishVolume")
 			} else {
-				d.log.Error(fmt.Errorf("TritonKernelCache has not been created"), "name", tkcName, "namespace", tkcNamespace)
+				d.log.Error(fmt.Errorf("TritonKernelCache has not been created"), "Invalid Input", "name", tkcName, "namespace", tkcNamespace)
 				return nil, status.Error(codes.InvalidArgument, "TritonKernelCache has not been created NodePublishVolume")
 			}
 		} else {
-			d.log.Error(fmt.Errorf("unable to verify sourcePath"), "sourcePath", sourcePath)
+			d.log.Error(fmt.Errorf("unable to verify sourcePath"), "Invalid Input", "sourcePath", sourcePath)
 			return nil, status.Error(codes.InvalidArgument, "unable to verify sourcePath")
 		}
 	}
 	d.log.Info("Found TritonKernelCache CRD", "sourcePath", sourcePath)
 
-	err := os.MkdirAll(req.TargetPath, 0o750)
-	if err != nil {
+	if err := os.MkdirAll(req.TargetPath, 0o750); err != nil {
 		d.log.Error(err, "Failed to create target path", "volume_id", req.VolumeId, "targetPath", req.TargetPath)
 		return nil, err
 	}
 
-	mounted, err := isBindMounted(sourcePath)
+	// Check if already mounted
+	mounted, err := isBindMount(req.TargetPath)
 	if err != nil {
-		d.log.Error(fmt.Errorf("unable to verify if sourcePath already mounted"), "sourcePath", sourcePath)
-		return nil, status.Error(codes.InvalidArgument, "unable to verify if sourcePath already mounted")
+		d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"), "Invalid Input", "targetPath", req.TargetPath)
+		return nil, status.Error(codes.InvalidArgument, "unable to verify if targetPath already mounted")
 	}
 
-	// Mount options
-	if !mounted {
-		d.log.Info("bind mounting kernel cache", "sourcePath", sourcePath, "targetPath", req.TargetPath)
-
-		mountOptions := []string{"bind"}
-		if req.GetReadonly() {
-			mountOptions = append(mountOptions, "ro")
+	// If Already Mounted
+	if mounted {
+		_, ok := d.volumeIdMapping[req.VolumeId]
+		if !ok {
+			// Save off the VolumeId mapping to CRD Info
+			d.volumeIdMapping[req.VolumeId] = CacheData{
+				KernelName:    tkcName,
+				Namespace:     tkcNamespace,
+				ClusterScoped: clusterScoped,
+			}
 		}
 
-		// Perform the bind mount
-		cmd := exec.Command("mount", "-o", fmt.Sprintf("%s", joinOptions(mountOptions)), "--bind", sourcePath, req.TargetPath)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "mount failed: %v, output: %s", err, string(out))
-		}
-	} else {
 		d.log.Info("kernel cache already bind mounted", "sourcePath", sourcePath, "targetPath", req.TargetPath)
+		return &csi.NodePublishVolumeResponse{}, nil
+	}
+
+	d.log.Info("bind mounting kernel cache", "sourcePath", sourcePath, "targetPath", req.TargetPath)
+
+	// Perform the bind mount
+	options := []string{"bind"}
+	if req.Readonly {
+		options = append(options, "ro")
+	}
+
+	if err := d.mounter.Mount(sourcePath, req.TargetPath, "", options); err != nil {
+		d.log.Error(fmt.Errorf("bind mount failed"), "Invalid Input", "sourcePath", sourcePath, "targetPath", req.TargetPath)
+		return nil, status.Error(codes.Internal, "bind mount failed")
+	}
+
+	// Save off the VolumeId mapping to CRD Info
+	d.volumeIdMapping[req.VolumeId] = CacheData{
+		KernelName:    tkcName,
+		Namespace:     tkcNamespace,
+		ClusterScoped: clusterScoped,
 	}
 
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func isBindMounted(dir string) (bool, error) {
-	content, err := os.ReadFile("/proc/mounts")
-	if err != nil {
-		return false, fmt.Errorf("failed to read /proc/mounts: %w", err)
-	}
-
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 6 && fields[2] == dir && fields[4] == "bind" {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func joinOptions(opts []string) string {
-	return filepath.Clean(fmt.Sprintf("%s", opts))
-}
-
 // NodeUnpublishVolume removes the bind mount
 func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
-	d.log.Info("Request: NodeUnpublishVolume", "volume_id", req.VolumeId, "target_path", req.TargetPath)
+	d.log.Info("Request: NodeUnpublishVolume",
+		"VolumeId", req.VolumeId,
+		"TargetPath", req.TargetPath)
 
 	if req.VolumeId == "" {
 		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeUnpublishVolume"), "Invalid Input")
@@ -254,49 +250,69 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 		return nil, status.Error(codes.InvalidArgument, "must provide a TargetPath to NodeUnpublishVolume")
 	}
 
-	/*
-		targetPath := req.GetTargetPath()
-		log.Info("Removing bind-mount for volume (unpublishing)", "volume_id", req.VolumeId, "path", targetPath)
+	/*cacheData*/
+	_, ok := d.volumeIdMapping[req.VolumeId]
+	if !ok {
+		d.log.Error(fmt.Errorf("could not map VolumeId to TritonKernelCache"), "Invalid Input")
+		return nil, status.Error(codes.InvalidArgument, "could not map VolumeId to TritonKernelCache NodeUnpublishVolume")
+	}
 
-		mounted, err := d.DiskHotPlugger.IsMounted(targetPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				d.log.V(1).Info("targetPath has already been deleted", "targetPath", targetPath)
-
-				return &csi.NodeUnpublishVolumeResponse{}, nil
-			}
-			if !mount.IsCorruptedMnt(err) {
-				return &csi.NodeUnpublishVolumeResponse{}, err
-			}
-
-			mounted = true
+	// Check if already mounted
+	// d.mounter.IsLikelyNotMountPoint() doesn't detect bind mounts, so manually search
+	// the list of mounts for the Target Path.
+	mounted, err := isBindMount(req.TargetPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			d.log.Info("targetPath does not exist, just continue", "VolumeId", req.VolumeId, "TargetPath", req.TargetPath,
+				"Mount", mounted)
+		} else {
+			d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"), "Internal Error", "targetPath", req.TargetPath)
+			return nil, status.Error(codes.InvalidArgument, "unable to verify if targetPath already mounted")
 		}
-		d.log.V(1).Info("Checking if currently mounting", "volume_id", req.VolumeId, "mounted", mounted)
+	}
 
-		if !mounted {
-			if err = os.RemoveAll(targetPath); err != nil {
-				d.log.Error(err, "Failed to remove target path", "targetPath", targetPath)
-				return nil, status.Errorf(codes.Internal, "failed to remove target path %q: %s", targetPath, err)
-			}
-
-			return &csi.NodeUnpublishVolumeResponse{}, nil
+	// Only attempt to unmount if it's mounted
+	if mounted {
+		if err := d.mounter.Unmount(req.TargetPath); err != nil {
+			d.log.Error(fmt.Errorf("umount failed"), "Invalid Input", "targetPath", req.TargetPath)
+			return nil, status.Error(codes.Internal, "umount failed")
 		}
+	} else {
+		d.log.Info("targetPath is not mounted, just continue", "VolumeId", req.VolumeId, "TargetPath", req.TargetPath)
+	}
 
-		err = d.DiskHotPlugger.Unmount(targetPath)
-		if err != nil {
-			log.Error(err, "Failed to unmount target path", "targetPath", targetPath)
-			return nil, err
-		}
-
-		log.Info("Removing target path", "volume_id", req.VolumeId, "target_path", targetPath)
-		err = os.Remove(targetPath)
-		if err != nil && !os.IsNotExist(err) {
-			log.Error(err, "Failed to remove target path", "targetPath", targetPath)
-			return nil, status.Errorf(codes.Internal, "failed to remove target path %q: %s", targetPath, err)
-		}
-	*/
+	delete(d.volumeIdMapping, req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
+}
+
+func isBindMount(path string) (bool, error) {
+	dirInfo, err := os.Stat(path)
+	if err != nil {
+		return false, fmt.Errorf("error getting info for %s: %w", path, err)
+	}
+
+	parentDir := filepath.Dir(path)
+	parentInfo, err := os.Stat(parentDir)
+	if err != nil {
+		return false, fmt.Errorf("error getting info for %s: %w", parentDir, err)
+	}
+
+	dirSys, ok := dirInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, fmt.Errorf("error getting syscall.Stat_t for %s", path)
+	}
+
+	parentSys, ok := parentInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, fmt.Errorf("error getting syscall.Stat_t for %s", parentDir)
+	}
+
+	if dirSys.Dev != parentSys.Dev {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // NodeGetInfo returns some identifier (ID, name) for the current node
@@ -343,7 +359,7 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 		}
 
 		if !mounted {
-			log.Error(fmt.Errorf("Volume path is not mounted"), "volume_id", req.VolumeId, "path", volumePath)
+			log.Error(fmt.Errorf("Volume path is not mounted"), "Invalid Input", "volume_id", req.VolumeId, "path", volumePath)
 			return nil, status.Errorf(codes.NotFound, "volume path %q is not mounted", volumePath)
 		}
 
@@ -403,7 +419,7 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 		// Find the disk attachment location
 		attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 		if attachedDiskPath == "" {
-			log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"), "volume_id", req.VolumeId)
+			log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"), "Invalid Input", "volume_id", req.VolumeId)
 			return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 		}
 

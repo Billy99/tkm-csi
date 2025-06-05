@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
+	"os/exec"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -58,12 +58,9 @@ func (s *ImageServer) UnloadKernelImage(ctx context.Context, req *pb.UnloadKerne
 
 // NewImageServer returns an ImageServer instance that implements gRPC endpoints
 // for TKM to manage Triton Kernel Caches that are loaded via OCI Images.
-func NewImageServer(
-	nodeName, namespace, imagePort string,
-	noGpu bool) (*ImageServer, error) {
-
-	if !fileExists(constants.TcvBinary) {
-		return nil, fmt.Errorf("TCV must be installed", "location", constants.TcvBinary)
+func NewImageServer(nodeName, namespace, imagePort string, noGpu bool) (*ImageServer, error) {
+	if !cmdExists(constants.TcvBinary) {
+		return nil, fmt.Errorf("TCV must be installed")
 	}
 
 	return &ImageServer{
@@ -96,7 +93,7 @@ func (s *ImageServer) Run(ctx context.Context) error {
 	return nil
 }
 
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
+func cmdExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
 }

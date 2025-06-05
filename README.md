@@ -1,13 +1,14 @@
 # tkm-csi
+
 CSI Driver for the Triton Kernel Manager (TKM).
 TKM deploys, manages and monitors Triton Kernels, which are packaged in an OCI Image.
 The TKM CSI Driver is responsible for calling Triton Cache Vault (TCV), which is a
 sub-component of TKM, to unpackaged a Triton Kernel on a Node, then mount the
 Kernel in a Pod.
 
-## Local Development
+## Baremetal Development
 
-To test locally, run the steps in this section.
+To test on barematal, run the steps in this section.
 Current State:
 
 * PARTIAL: TKM Agent Stub calls TKM CSI Driver, so the OCI Images are expanded on Node.
@@ -63,10 +64,12 @@ In another window, use the `tkm-agent-stub` to simulate TritonKernelCache CRs be
 To deploy on Kubernetes, run the steps in this section.
 Current State:
 
-* BROKEN: TKM Agent does not call TKM CSI Driver, so the OCI Image is not on Node.
+* PARTIAL: TKM Agent does not call TKM CSI Driver, but the `tkm-agent-stub` binary
+  is included in the CSI Driver pod, so user can exec into the pod and load images.
 * PARTIAL: Kubelet calls TKM CSI Driver when Test Pod is created, TKM CSI Driver
-  responds with OK (Dummy Data).
-  Volume is not mounted, but pod comes up.
+  handles the NodePublishVolume and NodeUnpublishVolume requests, bind mounts and
+  unmounts the Kernel Cache directories.
+  The rest of the Kubelet calls are stubbed out.
 
 ### Deploy TKM Operator
 
@@ -113,14 +116,38 @@ tkm-operator-tkm-agent-g72bs                       1/1     Running   0          
 tkm-operator-tkm-agent-gb995                       1/1     Running   0          12d     10.244.2.3    kind-gpu-sim-worker2
 ```
 
+### Test TKM CSI Driver
+
 The `make deploy` adds a label to Node `kind-gpu-sim-worker` so it's easier to debug.
 So start logs on the `tkm-csi-node-xxxxx` on that node:
 
 ```bash
-$ kubectl logs -n tkm-system -f tkm-csi-node-9tv97
+kubectl logs -n tkm-system -f tkm-csi-node-9tv97
 ```
 
-Then deploy a TritonKernelCacheCluster instance along with a test pod referencing it:
+The TKM Agent has not been updated to call CSI Driver yet (message flow is still being
+designed), but the `tkm-agent-stub` used with baremetal testing has temporarily been
+added to the CSI Driver Node pod.
+To prepopulate the cache on a given node, exec into the node and run the `tkm-agent-stub`
+CLI.
+Use the same `tkm-csi-node-xxxxx` as the previous step:
+
+```bash
+kubectl exec -it -n tkm-system -c tkm-csi-node-plugin tkm-csi-node-9tv97 -- sh
+sh-5.2#
+sh-5.2# tkm-agent-stub -load -image quay.io/tkm/vector-add-cache:rocm -crdName flash-attention-rocm
+2025/06/04 18:53:47 Response from gRPC server's LoadKernelImage function: Load Image Request Succeeded
+
+# Command to unload, if needed
+sh-5.2# tkm-agent-stub -unload -crdName flash-attention-rocm
+2025/06/04 18:55:23 Response from gRPC server's UnloadKernelImage function: Unload Image Request Received
+```
+
+**NOTE:** The test pod in the next step is creating a Cluster Scoped CR.
+If Namespaced Scoped CRs are desired, include `-namespace` in the commands above and
+modify the Pod Spec below accordingly.
+
+Next deploy a TritonKernelCacheCluster instance along with a test pod referencing it.
 
 ```bash
 make deploy-test-pod
@@ -135,6 +162,45 @@ tkm-csi-test                                       1/1     Running   0          
 tkm-operator-controller-manager-55774ff55b-8tv2z   1/1     Running   0          12d     10.244.0.5    kind-gpu-sim-control-plane
 tkm-operator-tkm-agent-g72bs                       1/1     Running   0          12d     10.244.1.3    kind-gpu-sim-worker
 tkm-operator-tkm-agent-gb995                       1/1     Running   0          12d     10.244.2.3    kind-gpu-sim-worker2
+
+kubectl get tritonkernelcacheclusters
+NAME                   AGE
+flash-attention-rocm   69s
+
+kubectl get tritonkernelcacheclusters flash-attention-rocm -o yaml
+apiVersion: tkm.io/v1alpha1
+kind: TritonKernelCacheCluster
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"tkm.io/v1alpha1","kind":"TritonKernelCacheCluster","metadata":{"annotations":{},"name":"flash-attention-rocm","namespace":"default"},"spec":{"cacheImage":"quay.io/tkm/vector-add-cache:rocm","validateSignature":false}}
+  creationTimestamp: "2025-06-05T13:51:44Z"
+  generation: 1
+  name: flash-attention-rocm
+  namespace: default
+  resourceVersion: "128957"
+  uid: ffd5ec70-9543-4372-af0a-fd86f8901034
+spec:
+  cacheImage: quay.io/tkm/vector-add-cache:rocm
+  validateSignature: false
+status:
+  conditions:
+  - lastTransitionTime: "2025-06-05T13:51:44Z"
+    message: 'failed to fetch image: failed to fetch image: failed to fetch image:
+      Get "https://quay.io/v2/": tls: failed to verify certificate: x509: certificate
+      signed by unknown authority'
+    reason: ImageFetchFailed
+    status: "False"
+    type: Verified
+
+kubectl exec -it -n tkm-system tkm-csi-test -- ls -al /cache/
+total 0
+drwxr-xr-x  6 root root 120 Jun  5 13:51 .
+drwxr-xr-x. 1 root root  93 Jun  5 13:51 ..
+drwxr-xr-x  2 root root  60 Jun  5 13:51 CETLGDE7YAKGU4FRJ26IM6S47TFSIUU7KWBWDR3H2K3QRNRABUCA
+drwxr-xr-x  2 root root  60 Jun  5 13:51 CHN6BLIJ7AJJRKY2IETERW2O7JXTFBUD3PH2WE3USNVKZEKXG64Q
+drwxr-xr-x  2 root root 180 Jun  5 13:51 MCELTMXFCSPAMZYLZ3C3WPPYYVTVR4QOYNE52X3X6FIH7Z6N6X5A
+drwxr-xr-x  2 root root  60 Jun  5 13:51 c4d45c651d6ac181a78d8d2f3ead424b8b8f07dd23dc3de0a99f425d8a633fc6
 ```
 
 ### Cleanup
@@ -142,6 +208,7 @@ tkm-operator-tkm-agent-gb995                       1/1     Running   0          
 To cleanup, undeploy the test pod, the undeploy the TKM CSI Driver.
 
 ```bash
+cd $SRC_DIR/tkm-csi
 make undeploy-test-pod
 make undeploy
 ```
@@ -149,6 +216,6 @@ make undeploy
 To tear down the KIND cluster:
 
 ```bash
-cd TKM
+cd $SRC_DIR/TKM
 make destroy-kind
 ```
