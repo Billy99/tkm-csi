@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/billy99/tkm-csi/pkgs/constants"
+	"github.com/billy99/tkm-csi/pkgs/utils"
 	pb "github.com/billy99/tkm-csi/proto"
 )
 
@@ -33,7 +33,7 @@ func (s *ImageServer) LoadKernelImage(ctx context.Context, req *pb.LoadKernelIma
 	if req.Namespace != nil {
 		namespace = *req.Namespace
 	} else {
-		namespace = constants.ClusterScopedSubDir
+		namespace = utils.ClusterScopedSubDir
 	}
 
 	s.log.Info("Received Load Kernel Image Request",
@@ -50,16 +50,34 @@ func (s *ImageServer) LoadKernelImage(ctx context.Context, req *pb.LoadKernelIma
 }
 
 func (s *ImageServer) UnloadKernelImage(ctx context.Context, req *pb.UnloadKernelImageRequest) (*pb.UnloadKernelImageResponse, error) {
-	s.log.Error(fmt.Errorf("failed to"), "Received Unload Kernel Image Request",
+	var namespace string
+
+	if req.Namespace != nil {
+		namespace = *req.Namespace
+	} else {
+		namespace = utils.ClusterScopedSubDir
+	}
+
+	s.log.Info("Received Unload Kernel Image Request",
 		"CRD Name", req.Name,
-		"Namespace", req.Namespace)
-	return &pb.UnloadKernelImageResponse{Message: "Unload Image Request Received"}, nil
+		"Namespace", namespace)
+
+	if err := s.RemoveImage(namespace, req.Name); err != nil {
+		s.log.Error(fmt.Errorf("failed to remove cache"), "Unload Failure",
+			"CRD Name", req.Name,
+			"Namespace", req.Namespace,
+			"err", err)
+
+		return &pb.UnloadKernelImageResponse{Message: "Unload Image Request Failed"}, err
+	}
+
+	return &pb.UnloadKernelImageResponse{Message: "Unload Image Request Succeeded"}, nil
 }
 
 // NewImageServer returns an ImageServer instance that implements gRPC endpoints
 // for TKM to manage Triton Kernel Caches that are loaded via OCI Images.
 func NewImageServer(nodeName, namespace, imagePort string, noGpu bool) (*ImageServer, error) {
-	if !cmdExists(constants.TcvBinary) {
+	if !cmdExists(utils.TcvBinary) {
 		return nil, fmt.Errorf("TCV must be installed")
 	}
 

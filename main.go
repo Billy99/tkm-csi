@@ -14,9 +14,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/billy99/tkm-csi/pkgs/constants"
 	"github.com/billy99/tkm-csi/pkgs/driver"
 	"github.com/billy99/tkm-csi/pkgs/image"
+	"github.com/billy99/tkm-csi/pkgs/utils"
 )
 
 var versionInfo = flag.Bool("version", false, "Print the driver version")
@@ -39,11 +39,11 @@ func main() {
 	}
 	socketFilename := os.Getenv("CSI_ENDPOINT")
 	if socketFilename == "" {
-		socketFilename = constants.DefaultSocketFilename
+		socketFilename = utils.DefaultSocketFilename
 	}
 	imagePort := os.Getenv("CSI_IMAGE_SERVER_PORT")
 	if imagePort == "" {
-		imagePort = constants.DefaultImagePort
+		imagePort = utils.DefaultImagePort
 	}
 
 	// Parse command line variables
@@ -59,7 +59,7 @@ func main() {
 	}
 
 	_, err := exec.LookPath("tcv")
-	log.Info("cmdExists", "cmd", constants.TcvBinary, "err", err)
+	log.Info("cmdExists", "cmd", utils.TcvBinary, "err", err)
 
 	// Setup CSI Driver, which receives CSI requests from Kubelet
 	d, err := driver.NewDriver(log, nodeName, ns, socketFilename, *testMode)

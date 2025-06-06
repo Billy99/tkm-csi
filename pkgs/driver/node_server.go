@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/billy99/tkm-csi/pkgs/constants"
+	"github.com/billy99/tkm-csi/pkgs/utils"
 )
 
 // MaxVolumesPerNode is the maximum number of volumes a single node may host
@@ -150,7 +149,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	if !ok {
 		// Namespace is not required. If not provided, then assume it is a Cluster scoped
 		// TritonKernelCache instance.
-		tkcNamespace = constants.ClusterScopedSubDir
+		tkcNamespace = utils.ClusterScopedSubDir
 		clusterScoped = true
 	}
 
@@ -165,7 +164,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 		}
 	}
 
-	sourcePath := constants.DefaultCacheDir
+	sourcePath := utils.DefaultCacheDir
 	sourcePath = filepath.Join(sourcePath, tkcNamespace)
 	sourcePath = filepath.Join(sourcePath, tkcName)
 	if _, err := os.Stat(sourcePath); err != nil {
@@ -190,7 +189,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	}
 
 	// Check if already mounted
-	mounted, err := isBindMount(req.TargetPath)
+	mounted, err := utils.IsTargetBindMount(req.TargetPath)
 	if err != nil {
 		d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"), "Invalid Input", "targetPath", req.TargetPath)
 		return nil, status.Error(codes.InvalidArgument, "unable to verify if targetPath already mounted")
@@ -260,7 +259,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	// Check if already mounted
 	// d.mounter.IsLikelyNotMountPoint() doesn't detect bind mounts, so manually search
 	// the list of mounts for the Target Path.
-	mounted, err := isBindMount(req.TargetPath)
+	mounted, err := utils.IsTargetBindMount(req.TargetPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			d.log.Info("targetPath does not exist, just continue", "VolumeId", req.VolumeId, "TargetPath", req.TargetPath,
@@ -284,35 +283,6 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	delete(d.volumeIdMapping, req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
-}
-
-func isBindMount(path string) (bool, error) {
-	dirInfo, err := os.Stat(path)
-	if err != nil {
-		return false, fmt.Errorf("error getting info for %s: %w", path, err)
-	}
-
-	parentDir := filepath.Dir(path)
-	parentInfo, err := os.Stat(parentDir)
-	if err != nil {
-		return false, fmt.Errorf("error getting info for %s: %w", parentDir, err)
-	}
-
-	dirSys, ok := dirInfo.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false, fmt.Errorf("error getting syscall.Stat_t for %s", path)
-	}
-
-	parentSys, ok := parentInfo.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false, fmt.Errorf("error getting syscall.Stat_t for %s", parentDir)
-	}
-
-	if dirSys.Dev != parentSys.Dev {
-		return true, nil
-	}
-
-	return false, nil
 }
 
 // NodeGetInfo returns some identifier (ID, name) for the current node
