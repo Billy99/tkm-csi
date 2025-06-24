@@ -19,7 +19,8 @@ func (d *Driver) GetPluginInfo(context.Context, *csi.GetPluginInfoRequest) (*csi
 }
 
 // GetPluginCapabilities returns a list of the capabilities of this controller plugin
-func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
+func (d *Driver) GetPluginCapabilities(context.Context, *csi.GetPluginCapabilitiesRequest,
+) (*csi.GetPluginCapabilitiesResponse, error) {
 	log.Info().Msg("Request: GetPluginCapabilities")
 
 	return &csi.GetPluginCapabilitiesResponse{

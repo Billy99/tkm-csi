@@ -18,8 +18,10 @@ const MaxVolumesPerNode int64 = 1024
 const TritonKernelCacheIndex string = "csi.tkm.io/tritonKernelCache"
 const TritonKernelCacheNamespaceIndex string = "csi.tkm.io/namespace"
 
-// NodeStageVolume is called after the volume is attached to the instance, so it can be partitioned, formatted and mounted to a staging path
-func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+// NodeStageVolume is called after the volume is attached to the instance, so it can be partitioned,
+// formatted and mounted to a staging path
+func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest,
+) (*csi.NodeStageVolumeResponse, error) {
 	d.log.Info("Request: NodeStageVolume", "volume_id", req.VolumeId, "staging_target_path", req.StagingTargetPath)
 
 	if req.VolumeId == "" {
@@ -41,7 +43,8 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		// Find the disk attachment location
 		attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 		if attachedDiskPath == "" {
-			d.log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"), "Invalid Input", "volume_id", req.VolumeId)
+			d.log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"),
+				"Invalid Input", "volume_id", req.VolumeId)
 			return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 		}
 
@@ -79,7 +82,8 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 }
 
 // NodeUnstageVolume unmounts the volume when it's finished with, ready for deletion
-func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
+func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest,
+) (*csi.NodeUnstageVolumeResponse, error) {
 	d.log.Info("Request: NodeUnstageVolume", "volume_id", req.VolumeId, "staging_target_path", req.StagingTargetPath)
 
 	if req.VolumeId == "" {
@@ -117,7 +121,8 @@ func (d *Driver) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolu
 }
 
 // NodePublishVolume bind mounts the staging path into the container
-func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest,
+) (*csi.NodePublishVolumeResponse, error) {
 	d.log.Info("Request: NodePublishVolume",
 		"VolumeId", req.VolumeId,
 		"StagingTargetPath", req.StagingTargetPath,
@@ -173,7 +178,8 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 				d.log.Error(fmt.Errorf("TritonKernelCacheCluster has not been created"), "Invalid Input", "name", tkcName)
 				return nil, status.Error(codes.InvalidArgument, "TritonKernelCacheCluster has not been created NodePublishVolume")
 			} else {
-				d.log.Error(fmt.Errorf("TritonKernelCache has not been created"), "Invalid Input", "name", tkcName, "namespace", tkcNamespace)
+				d.log.Error(fmt.Errorf("TritonKernelCache has not been created"),
+					"Invalid Input", "name", tkcName, "namespace", tkcNamespace)
 				return nil, status.Error(codes.InvalidArgument, "TritonKernelCache has not been created NodePublishVolume")
 			}
 		} else {
@@ -191,7 +197,8 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	// Check if already mounted
 	mounted, err := utils.IsTargetBindMount(req.TargetPath)
 	if err != nil {
-		d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"), "Invalid Input", "targetPath", req.TargetPath)
+		d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"),
+			"Invalid Input", "targetPath", req.TargetPath)
 		return nil, status.Error(codes.InvalidArgument, "unable to verify if targetPath already mounted")
 	}
 
@@ -235,7 +242,8 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 }
 
 // NodeUnpublishVolume removes the bind mount
-func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest,
+) (*csi.NodeUnpublishVolumeResponse, error) {
 	d.log.Info("Request: NodeUnpublishVolume",
 		"VolumeId", req.VolumeId,
 		"TargetPath", req.TargetPath)
@@ -265,7 +273,8 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 			d.log.Info("targetPath does not exist, just continue", "VolumeId", req.VolumeId, "TargetPath", req.TargetPath,
 				"Mount", mounted)
 		} else {
-			d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"), "Internal Error", "targetPath", req.TargetPath)
+			d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"),
+				"Internal Error", "targetPath", req.TargetPath)
 			return nil, status.Error(codes.InvalidArgument, "unable to verify if targetPath already mounted")
 		}
 	}
@@ -307,7 +316,8 @@ type VolumeStatistics struct {
 }
 
 // NodeGetVolumeStats returns the volume capacity statistics available for the the given volume
-func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
+func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest,
+) (*csi.NodeGetVolumeStatsResponse, error) {
 	d.log.Info("Request: NodeGetVolumeStats", "volume_id", req.VolumeId)
 
 	if req.VolumeId == "" {
@@ -336,7 +346,13 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 		stats, err := d.DiskHotPlugger.GetStatistics(volumePath)
 		if err != nil {
 			log.Error(err, "Failed to retrieve capacity statistics", "volume_id", req.VolumeId, "path", volumePath)
-			return nil, status.Errorf(codes.Internal, "failed to retrieve capacity statistics for volume path %q: %s", volumePath, err)
+			return nil,
+				status.Errorf(
+					codes.Internal,
+					"failed to retrieve capacity statistics for volume path %q: %s",
+					volumePath,
+					err,
+				)
 		}
 	*/
 
@@ -369,7 +385,8 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 }
 
 // NodeExpandVolume is used to expand the filesystem inside volumes
-func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
+func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest,
+) (*csi.NodeExpandVolumeResponse, error) {
 	d.log.Info("Request: NodeExpandVolume", "volume_id", req.VolumeId, "target_path", req.VolumePath)
 	if req.VolumeId == "" {
 		d.log.Error(fmt.Errorf("must provide a VolumeId to NodeExpandVolume"), "Invalid Input")
@@ -389,7 +406,8 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 		// Find the disk attachment location
 		attachedDiskPath := d.DiskHotPlugger.PathForVolume(req.VolumeId)
 		if attachedDiskPath == "" {
-			log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"), "Invalid Input", "volume_id", req.VolumeId)
+			log.Error(fmt.Errorf("path to volume (/dev/disk/by-id/VOLUME_ID) not found"),
+				"Invalid Input", "volume_id", req.VolumeId)
 			return nil, status.Errorf(codes.NotFound, "path to volume (/dev/disk/by-id/%s) not found", req.VolumeId)
 		}
 
@@ -407,7 +425,8 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 }
 
 // NodeGetCapabilities returns the capabilities that this node and driver support
-func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
+func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest,
+) (*csi.NodeGetCapabilitiesResponse, error) {
 	// Intentionally don't return VOLUME_CONDITION and NODE_GET_VOLUME_STATS
 	return &csi.NodeGetCapabilitiesResponse{
 		Capabilities: []*csi.NodeServiceCapability{

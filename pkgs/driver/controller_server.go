@@ -88,7 +88,12 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 				}
 
 				d.log.Error(fmt.Errorf("TKM Volume is not 'available'"), "status", v.Status)
-				return nil, status.Errorf(codes.Unavailable, "Volume isn't available to be attached, state is currently %s", v.Status)
+				return nil,
+					status.Errorf(
+						codes.Unavailable,
+						"Volume isn't available to be attached, state is currently %s",
+						v.Status,
+					)
 			}
 		}
 	*/
@@ -101,11 +106,19 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	// 	}
 	// 	snapshot := volSource.GetSnapshot()
 	// 	if snapshot == nil {
-	// 		return nil, status.Error(codes.InvalidArgument, "Volume content source type is set to Snapshot, but the Snapshot is not provided")
+	// 		return nil,
+	// 			status.Error(
+	// 				codes.InvalidArgument,
+	// 				"Volume content source type is set to Snapshot, but the Snapshot is not provided",
+	//			)
 	// 	}
 	// 	snapshotID = snapshot.GetSnapshotId()
 	// 	if snapshotID == "" {
-	// 		return nil, status.Error(codes.InvalidArgument, "Volume content source type is set to Snapshot, but the SnapshotID is not provided")
+	// 		return nil,
+	// 			status.Error(
+	// 				codes.InvalidArgument,
+	// 				"Volume content source type is set to Snapshot, but the SnapshotID is not provided",
+	//			)
 	// 	}
 	// }
 
@@ -121,10 +134,19 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		availableSize := int64(quota.DiskGigabytesLimit - quota.DiskGigabytesUsage)
 		if availableSize < desiredSize {
 			d.log.Error(fmt.Errorf("Requested volume would exceed storage quota available"))
-			return nil, status.Errorf(codes.OutOfRange, "Requested volume would exceed volume space quota by %d GB", desiredSize-availableSize)
+			return nil,
+				status.Errorf(
+					codes.OutOfRange,
+					"Requested volume would exceed volume space quota by %d GB",
+					desiredSize-availableSize,
+				)
 		} else if quota.DiskVolumeCountUsage >= quota.DiskVolumeCountLimit {
 			d.log.Error(fmt.Errorf("Requested volume would exceed volume quota available"))
-			return nil, status.Errorf(codes.OutOfRange, "Requested volume would exceed volume count limit quota of %d", quota.DiskVolumeCountLimit)
+			return nil,
+				status.Errorf(codes.OutOfRange,
+					"Requested volume would exceed volume count limit quota of %d",
+					quota.DiskVolumeCountLimit,
+				)
 		}
 
 		d.log.V(1).Info("Quota has sufficient capacity remaining",
@@ -179,7 +201,13 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	}
 
 	d.log.Error(err, "TKM Volume is not 'available'")
-	return nil, status.Errorf(codes.Unavailable, "TKM Volume %q is not \"available\", state currently is %q", "14567" /*volume.ID*/, "error" /*volume.Status*/)
+	return nil,
+		status.Errorf(
+			codes.Unavailable,
+			"TKM Volume %q is not \"available\", state currently is %q",
+			"14567", /*volume.ID*/
+			"error", /*volume.Status*/
+		)
 }
 
 // waitForVolumeAvailable will just sleep/loop waiting for TKM's API to report it's available, or hit a defined
@@ -211,7 +239,8 @@ func (d *Driver) waitForVolumeStatus(vol *tkmgo.Volume, desiredStatus string, re
 }
 */
 
-// DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and subsequent billing
+// DeleteVolume is used once a volume is unused and therefore unmounted, to stop the resources being used and
+// subsequent billing
 func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
 	d.log.Info("Request: DeleteVolume", "volume_id", req.VolumeId)
 
@@ -239,7 +268,8 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 }
 
 // ControllerPublishVolume is used to mount an underlying volume to required k3s node
-func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest,
+) (*csi.ControllerPublishVolumeResponse, error) {
 	d.log.Info("Request: ControllerPublishVolume", "volume_id", req.VolumeId, "node_id", req.NodeId)
 
 	if req.VolumeCapability == nil {
@@ -295,7 +325,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 				"requested_instance_id", req.NodeId,
 				"current_instance_id", volume.InstanceID,
 				"Volume is not available to be attached")
-			return nil, status.Errorf(codes.Unavailable, "Volume %q is not available to be attached, state is currently %q", volume.ID, volume.Status)
+			return nil,
+				status.Errorf(codes.Unavailable,
+					"Volume %q is not available to be attached, state is currently %q",
+					volume.ID,
+					volume.Status
+				)
 		}
 
 		// Check if the volume is attaching to this node
@@ -334,12 +369,24 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		}
 		if volume.Status != "attached" {
 			d.log.Error(fmt.Errorf("Volume is not in the attached state"), "volume_id", volume.ID, "status", volume.Status)
-			return nil, status.Errorf(codes.Unavailable, "Volume %q is not attached to the requested instance, state is currently %q", volume.ID, volume.Status)
+			return nil,
+				status.Errorf(codes.Unavailable,
+					"Volume %q is not attached to the requested instance, state is currently %q",
+					volume.ID,
+					volume.Status)
 		}
 
 		if volume.InstanceID != req.NodeId {
-			d.log.Error(fmt.Errorf("Volume is not attached to the requested instance"), "volume_id", volume.ID, "instance_id", req.NodeId)
-			return nil, status.Errorf(codes.Unavailable, "Volume %q is not attached to the requested instance %q, instance id is currently %q", volume.ID, req.NodeId, volume.InstanceID)
+			d.log.Error(fmt.Errorf("Volume is not attached to the requested instance"),
+				"volume_id", volume.ID,
+				"instance_id", req.NodeId)
+			return nil,
+				status.Errorf(codes.Unavailable,
+					"Volume %q is not attached to the requested instance %q, instance id is currently %q",
+					volume.ID,
+					req.NodeId,
+					volume.InstanceID
+				)
 		}
 	*/
 
@@ -348,7 +395,8 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 }
 
 // ControllerUnpublishVolume detaches the volume from the k3s node it was connected
-func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest,
+) (*csi.ControllerUnpublishVolumeResponse, error) {
 	d.log.Info("Request: ControllerUnpublishVolume", "volume_id", req.VolumeId)
 
 	if req.VolumeId == "" {
@@ -359,7 +407,8 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		d.log.V(1).Info("Finding volume in TKM API")
 		volume, err := d.TkmClient.GetVolume(req.VolumeId)
 		if err != nil {
-			if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") || strings.Contains(err.Error(), "ZeroMatchesError") {
+			if strings.Contains(err.Error(), "DatabaseVolumeNotFoundError") ||
+				strings.Contains(err.Error(), "ZeroMatchesError") {
 				d.log.Info("Volume already deleted from TKM API, pretend it's unmounted", "volume_id", req.VolumeId)
 				return &csi.ControllerUnpublishVolumeResponse{}, nil
 			}
@@ -425,12 +474,18 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	/*
 		// err that the the volume is not available
 		d.log.Error(fmt.Errorf("TKM Volume did not go back to 'available' status"))
-		return nil, status.Errorf(codes.Unavailable, "TKM Volume %q did not go back to \"available\", state is currently %q", req.VolumeId, volume.Status)
+		return nil,
+			status.Errorf(
+				codes.Unavailable,
+				"TKM Volume %q did not go back to \"available\", state is currently %q",
+				req.VolumeId,
+				volume.Status)
 	*/
 }
 
 // ValidateVolumeCapabilities returns the features of the volume, e.g. RW, RO, RWX
-func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest,
+) (*csi.ValidateVolumeCapabilitiesResponse, error) {
 	d.log.Info("Request: ValidateVolumeCapabilities", "volume_id", req.VolumeId)
 
 	if req.VolumeId == "" {
@@ -547,7 +602,8 @@ func (d *Driver) GetCapacity(context.Context, *csi.GetCapacityRequest) (*csi.Get
 }
 
 // ControllerGetCapabilities returns the capabilities of the controller, what features it implements
-func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
+func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCapabilitiesRequest,
+) (*csi.ControllerGetCapabilitiesResponse, error) {
 	d.log.Info("Request: ControllerGetCapabilities")
 
 	rawCapabilities := []csi.ControllerServiceCapability_RPC_Type{
@@ -556,8 +612,10 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
-		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT, TODO: Uncomment after client implementation is complete.
-		// csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS, TODO: Uncomment after client implementation is complete.
+		// TODO: Uncomment after client implementation is complete.
+		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		// TODO: Uncomment after client implementation is complete.
+		// csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
 	}
 
 	var csc []*csi.ControllerServiceCapability
@@ -582,7 +640,8 @@ func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCa
 }
 
 // CreateSnapshot is part of implementing Snapshot & Restore functionality, but we don't support that
-func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
+func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest,
+) (*csi.CreateSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 	// TODO: Uncomment after client implementation is complete.
 	// snapshotName := req.GetName()
@@ -627,7 +686,12 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 	// 		"snapshot_name", snapshotName,
 	// 		"requested_source_volume_id", sourceVolID,
 	// 		"actual_source_volume_id", snapshot.VolumeID)
-	// 	return nil, status.Errorf(codes.AlreadyExists, "snapshot with the same name %q but with different SourceVolumeId already exist", snapshotName)
+	// 	return nil,
+	// 		status.Errorf(
+	// 			codes.AlreadyExists,
+	// 			"snapshot with the same name %q but with different SourceVolumeId already exist",
+	// 			snapshotName
+	//		)
 	// }
 	//
 	// d.log.V(1).Info("Create volume snapshot in TKM API",
@@ -666,7 +730,8 @@ func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequ
 }
 
 // DeleteSnapshot is part of implementing Snapshot & Restore functionality, and it will be supported in the future.
-func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest,
+) (*csi.DeleteSnapshotResponse, error) {
 	d.log.Info("Request: DeleteSnapshot", "snapshot_id", req.GetSnapshotId())
 
 	snapshotID := req.GetSnapshotId()
@@ -683,7 +748,13 @@ func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequ
 	// 		d.log.Info("Snapshot already deleted from TKM API", "volume_id", snapshotID)
 	// 		return &csi.DeleteSnapshotResponse{}, nil
 	// 	} else if strings.Contains(err.Error(), "DatabaseSnapshotCannotDeleteInUseError") {
-	// 		return nil, status.Errorf(codes.FailedPrecondition, "failed to delete snapshot %q, it is currently in use, err: %s", snapshotID, err)
+	// 		return nil,
+	// 			status.Errorf(
+	// 				codes.FailedPrecondition,
+	// 				"failed to delete snapshot %q, it is currently in use, err: %s",
+	// 				snapshotID,
+	// 				err
+	//			)
 	// 	}
 	// 	return nil, status.Errorf(codes.Internal, "failed to delete snapshot %q, err: %s", snapshotID, err)
 	// }
@@ -700,7 +771,8 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 
 	if req.GetStartingToken() != "" {
 		d.log.Error(
-			fmt.Errorf("ListSnapshots RPC received a Starting token, but pagination is not supported. Ensure the request does not include a starting token"),
+			fmt.Errorf("ListSnapshots RPC received a Starting token, but pagination is not supported."+
+				"Ensure the request does not include a starting token"),
 			"Invalid Input")
 		return nil, status.Error(codes.Aborted, "starting-token not supported")
 	}
@@ -714,7 +786,8 @@ func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsReques
 		// Todo: Un-comment post client implementation
 		// snapshot, err := d.TkmClient.GetSnapshot(snapshotID)
 		// if err != nil {
-		// 	// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders, it's still not clear what error will be returned by API (awaiting implementation - WIP)
+		// 	// Todo: DatabaseSnapshotNotFoundError & DiskSnapshotNotFoundError are placeholders,
+		//  // it's still not clear what error will be returned by API (awaiting implementation - WIP)
 		// 	if strings.Contains(err.Error(), "DatabaseSnapshotNotFoundError") ||
 		// 		strings.Contains(err.Error(), "DiskSnapshotNotFoundError") {
 		// 		d.log.Info("ListSnapshots: no snapshot found, returning with success", "snapshot_id", snapshotID)
@@ -809,7 +882,8 @@ func getVolSizeInBytes(capRange *csi.CapacityRange) (int64, error) {
 // }
 
 // ControllerExpandVolume allows for offline expansion of Volumes
-func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest,
+) (*csi.ControllerExpandVolumeResponse, error) {
 	volID := req.GetVolumeId()
 
 	d.log.Info("Request: ControllerExpandVolume", "volume_id", volID)
@@ -847,7 +921,9 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 
 		if desiredSize <= int64(volume.SizeGigabytes) {
 			d.log.Info("Volume is currently larger that desired Size", "volume_id", volID)
-			return &csi.ControllerExpandVolumeResponse{CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte, NodeExpansionRequired: true}, nil
+			return &csi.ControllerExpandVolumeResponse{
+				CapacityBytes: int64(volume.SizeGigabytes) * BytesInGigabyte,
+			  	NodeExpansionRequired: true}, nil
 		}
 
 		if volume.Status != "available" {
@@ -883,12 +959,14 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 }
 
 // ControllerGetVolume is for optional Kubernetes health checking of volumes and we don't support it yet
-func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
+func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest,
+) (*csi.ControllerGetVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // ControllerModifyVolume modify volume
-func (d *Driver) ControllerModifyVolume(_ context.Context, _ *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
+func (d *Driver) ControllerModifyVolume(_ context.Context, _ *csi.ControllerModifyVolumeRequest,
+) (*csi.ControllerModifyVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 

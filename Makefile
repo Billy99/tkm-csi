@@ -1,12 +1,13 @@
 VERSION ?= 0.0.1
 
-QUAY_USER ?= billy99
+QUAY_USER ?= tkm
 TAG_CSI ?= latest
 CSI_IMG ?= quay.io/$(QUAY_USER)/tkm-csi-plugin:$(TAG_CSI)
 
 # Image building tool (docker / podman) - docker is preferred in CI
 CONTAINER_BIN_PATH := $(shell which docker 2>/dev/null || which podman)
 CONTAINER_TOOL ?= $(shell basename ${CONTAINER_BIN_PATH})
+GOLANGCI_LINT_VERSION = latest
 # CONTAINER_FLAGS
 
 .PHONY: all
@@ -19,6 +20,20 @@ help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Build
+.PHONY: fmt
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+.PHONY: lint-prereqs
+lint-prereqs:
+	@echo "### Test if prerequisites are met, and installing missing dependencies"
+	GOFLAGS="" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+
+.PHONY: lint
+lint: lint-prereqs ## Run linter (golangci-lint).
+	@echo "### Linting code"
+	golangci-lint run ./...
+
 .PHONY: build-csi
 build-csi: ## Build the tkm-csi-plugin binary.
 	go build -o bin/tkm-csi-plugin .
