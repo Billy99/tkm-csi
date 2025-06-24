@@ -80,8 +80,10 @@ func (s *ImageServer) RemoveImage(namespace, kernelName string) error {
 	}
 	s.log.V(1).Info("Kernel Cache directory removed", "outputDir", outputDir)
 
-	empty, err := IsDirectoryEmpty(parentDir)
-	if empty {
+	empty, err := s.IsDirectoryEmpty(parentDir)
+	if err != nil {
+		return err
+	} else if empty {
 		s.log.Info("Deleting Namespace directory as well", "parentDir", parentDir)
 		err := os.RemoveAll(parentDir)
 		if err != nil {
@@ -94,12 +96,17 @@ func (s *ImageServer) RemoveImage(namespace, kernelName string) error {
 	return nil
 }
 
-func IsDirectoryEmpty(name string) (bool, error) {
+func (s *ImageServer) IsDirectoryEmpty(name string) (bool, error) {
 	f, err := os.Open(name)
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			s.log.Error(err, "failed to close directory")
+		}
+	}()
 
 	_, err = f.Readdirnames(1)
 	if err == io.EOF {

@@ -117,7 +117,8 @@ func (d *Driver) Run(ctx context.Context) error {
 	d.log.Info("Created gRPC listener")
 
 	// log gRPC response errors for better observability
-	errHandler := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	errHandler := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
 		resp, err := handler(ctx, req)
 		if err != nil {
 			d.log.Info("method failed", "method", info.FullMethod)

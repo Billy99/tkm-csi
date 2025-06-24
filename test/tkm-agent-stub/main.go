@@ -78,7 +78,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			log.Fatalf("error closing connection: %v", err)
+		}
+	}()
 
 	c := pb.NewTkmCsiServiceClient(conn)
 

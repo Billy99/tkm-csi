@@ -27,7 +27,8 @@ type ImageServer struct {
 	pb.UnimplementedTkmCsiServiceServer
 }
 
-func (s *ImageServer) LoadKernelImage(ctx context.Context, req *pb.LoadKernelImageRequest) (*pb.LoadKernelImageResponse, error) {
+func (s *ImageServer) LoadKernelImage(ctx context.Context, req *pb.LoadKernelImageRequest,
+) (*pb.LoadKernelImageResponse, error) {
 	var namespace string
 
 	if req.Namespace != nil {
@@ -49,7 +50,8 @@ func (s *ImageServer) LoadKernelImage(ctx context.Context, req *pb.LoadKernelIma
 	return &pb.LoadKernelImageResponse{Message: "Load Image Request Succeeded"}, nil
 }
 
-func (s *ImageServer) UnloadKernelImage(ctx context.Context, req *pb.UnloadKernelImageRequest) (*pb.UnloadKernelImageResponse, error) {
+func (s *ImageServer) UnloadKernelImage(ctx context.Context, req *pb.UnloadKernelImageRequest,
+) (*pb.UnloadKernelImageResponse, error) {
 	var namespace string
 
 	if req.Namespace != nil {
@@ -93,7 +95,10 @@ func NewImageServer(nodeName, namespace, imagePort string, noGpu bool) (*ImageSe
 func (s *ImageServer) Run(ctx context.Context) error {
 	s.log = ctrl.Log.WithName("tkm-image-server")
 
-	s.initializeFilesystem()
+	err := s.initializeFilesystem()
+	if err != nil {
+		return err
+	}
 
 	lis, err := net.Listen("tcp", s.ImagePort)
 	if err != nil {
