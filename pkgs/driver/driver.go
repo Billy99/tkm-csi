@@ -29,22 +29,27 @@ var Version string = "0.0.1"
 // DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
 const DefaultVolumeSizeGB int = 10
 
+// CacheData contains metadata about a given Kernel Cache.
 type CacheData struct {
-	KernelName    string
-	Namespace     string
-	ClusterScoped bool
+	volumeSize    int64
+	clusterScoped bool
+	kernelName    string
+	namespace     string
 }
 
 // Driver implement the CSI endpoints for Identity, Node and Controller
 type Driver struct {
 	client.Client
-	SocketFilename  string
-	NodeName        string
-	Namespace       string
-	TestMode        bool
-	mounter         mount.Interface
-	grpcServer      *grpc.Server
-	log             logr.Logger
+	SocketFilename string
+	NodeName       string
+	Namespace      string
+	TestMode       bool
+	mounter        mount.Interface
+	grpcServer     *grpc.Server
+	log            logr.Logger
+
+	// volumeIdMapping stores metadata for each Kernel Cache and is
+	// indexed by the VolumeId sent from Kubelet.
 	volumeIdMapping map[string]CacheData
 
 	csi.UnimplementedNodeServer

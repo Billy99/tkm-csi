@@ -105,9 +105,9 @@ IGNORE_NOT_FOUND ?= true
 
 #.PHONY: undeploy-on-kind
 #undeploy-on-kind: ## Undeploy operator and agent from the Kind GPU cluster.
-#	@echo "Undeploying operator and agent from Kind GPU cluster: $(KIND_CLUSTER_NAME)"
+#	@echo "Un-deploying operator and agent from Kind GPU cluster: $(KIND_CLUSTER_NAME)"
 #	$(KUSTOMIZE) build config/kind-gpu | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
-#	@echo "Undeployment from Kind GPU cluster $(KIND_CLUSTER_NAME) completed."
+#	@echo "Un-deployment from Kind GPU cluster $(KIND_CLUSTER_NAME) completed."
 
 #.PHONY: run-on-kind
 #run-on-kind: setup-kind kind-load-images deploy-on-kind ## Setup Kind cluster, load images, and deploy
@@ -123,7 +123,7 @@ deploy: ## Deploy CSI Controller and Node to K8s cluster specified in ~/.kube/co
 	kubectl apply -f manifests/controller-plugin.yaml
 	@echo "Deploying CSI Node RBAC."
 	kubectl apply -f manifests/rbac-node.yaml
-	@echo "Deploying CSI Node Daemonset."
+	@echo "Deploying CSI Node DaemonSet."
 	kubectl apply -f manifests/node-plugin.yaml
 	@echo "Add label tkm-test-node= to node kind-gpu-sim-worker."
 	kubectl label node kind-gpu-sim-worker tkm-test-node=true
@@ -131,15 +131,15 @@ deploy: ## Deploy CSI Controller and Node to K8s cluster specified in ~/.kube/co
 
 .PHONY: undeploy
 undeploy: undeploy-test-pod ## Undeploy CSI Controller and Node from K8s cluster specified in ~/.kube/config.
-	@echo "Undeploying CSI Node Daemonset."
+	@echo "Un-deploying CSI Node DaemonSet."
 	kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f manifests/node-plugin.yaml
-	@echo "Undeploying CSI Node RBAC."
+	@echo "Un-deploying CSI Node RBAC."
 	kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f manifests/rbac-node.yaml
-	@echo "Undeploying CSI Controller Deployment."
+	@echo "Un-deploying CSI Controller Deployment."
 	kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f manifests/controller-plugin.yaml
-	@echo "Undeploying CSI Controller RBAC."
+	@echo "Un-deploying CSI Controller RBAC."
 	kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f manifests/rbac-controller.yaml
-	@echo "Undeploying CSI-Driver Object."
+	@echo "Un-deploying CSI-Driver Object."
 	kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f manifests/csi-driver.yaml
 	@echo "Remove label tkm-test-node= from node kind-gpu-sim-worker."
 	kubectl label node kind-gpu-sim-worker tkm-test-node-
@@ -152,5 +152,5 @@ deploy-test-pod: ## Deploying TritonKernelCacheCluster Instance and a Test Pod.
 
 .PHONY: undeploy-test-pod
 undeploy-test-pod: ## Deploy CSI Controller and Node to K8s cluster specified in ~/.kube/config.
-	@echo "Undeploying TritonKernelCacheCluster Instance and Test Pod."
+	@echo "Un-deploying TritonKernelCacheCluster Instance and Test Pod."
 	kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f examples/testpod.yaml

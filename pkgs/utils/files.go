@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,22 +59,36 @@ func IsSourceBindMount(namespace, name string, log logr.Logger) (bool, error) {
 	// Search for a specific string (e.g., "namespace/name")
 	sourcePath := namespace
 	sourcePath = filepath.Join(sourcePath, name)
-	log.Info("Searching for sourcePath in findmnt output:", "sourcePath", sourcePath)
+	log.V(1).Info("IsSourceBindMount(): Searching for sourcePath in findmnt output:", "sourcePath", sourcePath)
 
 	found := false
 	for _, line := range lines {
 		if strings.Contains(line, sourcePath) {
-			fmt.Println(line)
 			found = true
 			break
 		}
 	}
 
 	if found {
-		log.Info("sourcePath Found", "sourcePath", sourcePath)
+		log.V(1).Info("IsSourceBindMount(): sourcePath Found", "sourcePath", sourcePath)
 	} else {
-		log.Info("sourcePath not found", "sourcePath", sourcePath)
+		log.V(1).Info("IsSourceBindMount(): sourcePath not found", "sourcePath", sourcePath)
 	}
 
 	return found, nil
+}
+
+// DirSize calculates the total size of a directory and its subdirectories.
+func DirSize(path string) (int64, error) {
+	var totalSize int64
+	err := filepath.Walk(path, func(_ string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+	return totalSize, err
 }
