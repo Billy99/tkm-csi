@@ -26,9 +26,6 @@ const Name string = "TKM CSI Driver"
 // Version is the current version of the driver to set in the User-Agent header
 var Version string = "0.0.1"
 
-// DefaultVolumeSizeGB is the default size in Gigabytes of an unspecified volume
-const DefaultVolumeSizeGB int = 10
-
 // CacheData contains metadata about a given Kernel Cache.
 type CacheData struct {
 	volumeSize    int64
@@ -43,6 +40,7 @@ type Driver struct {
 	SocketFilename string
 	NodeName       string
 	Namespace      string
+	cacheDir       string
 	TestMode       bool
 	mounter        mount.Interface
 	grpcServer     *grpc.Server
@@ -59,15 +57,17 @@ type Driver struct {
 
 // NewDriver returns a CSI driver that implements gRPC endpoints for CSI
 func NewDriver(log logr.Logger,
-	nodeName, namespace, socketFilename string,
+	nodeName, namespace, socketFilename, cacheDir string,
 	testMode bool) (*Driver, error) {
 	return &Driver{
 		NodeName:        nodeName,
 		Namespace:       namespace,
 		SocketFilename:  socketFilename,
+		cacheDir:        cacheDir,
 		TestMode:        testMode,
-		grpcServer:      &grpc.Server{},
 		mounter:         mount.New(""),
+		grpcServer:      &grpc.Server{},
+		log:             log,
 		volumeIdMapping: map[string]CacheData{},
 	}, nil
 }

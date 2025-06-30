@@ -15,7 +15,7 @@ import (
 
 // MaxVolumesPerNode is the maximum number of volumes a single node may host
 const MaxVolumesPerNode int64 = 1024
-const TritonKernelCacheIndex string = "csi.tkm.io/tritonKernelCache"
+const TritonKernelCacheIndex string = "csi.tkm.io/TKMCache"
 const TritonKernelCacheNamespaceIndex string = "csi.tkm.io/namespace"
 
 // NodeStageVolume is called after the volume is attached to the instance, so it can be
@@ -88,7 +88,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	}
 
 	// Build up the directory name from the namespace and CRD name.
-	sourcePath := utils.DefaultCacheDir
+	sourcePath := d.cacheDir
 	sourcePath = filepath.Join(sourcePath, tkcNamespace)
 	sourcePath = filepath.Join(sourcePath, tkcName)
 	if _, err := os.Stat(sourcePath); err != nil {
@@ -116,7 +116,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	}
 
 	// Check if the Kernel Cache is already mounted.
-	mounted, err := utils.IsTargetBindMount(req.TargetPath)
+	mounted, err := utils.IsTargetBindMount(req.TargetPath, d.log)
 	if err != nil {
 		d.log.Error(fmt.Errorf("unable to verify if targetPath already mounted"),
 			"invalid input", "targetPath", req.TargetPath)
@@ -195,14 +195,16 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	/* Check if Cache Data was created */
 	_, ok := d.volumeIdMapping[req.VolumeId]
 	if !ok {
-		d.log.Error(fmt.Errorf("could not map VolumeId to TKMCache"), "invalid input")
-		return nil, status.Error(codes.InvalidArgument, "could not map VolumeId to TKMCache NodeUnpublishVolume")
+		d.log.Info("could not map VolumeId to TKMCache so volume must be deleted, just continue", "VolumeId",
+			req.VolumeId, "TargetPath", req.TargetPath)
+	} else {
+		delete(d.volumeIdMapping, req.VolumeId)
 	}
 
 	// Check if already mounted
 	// d.mounter.IsLikelyNotMountPoint() doesn't detect bind mounts, so manually search
 	// the list of mounts for the Target Path.
-	mounted, err := utils.IsTargetBindMount(req.TargetPath)
+	mounted, err := utils.IsTargetBindMount(req.TargetPath, d.log)
 	if err != nil {
 		if os.IsNotExist(err) {
 			d.log.Info("targetPath does not exist, just continue", "VolumeId", req.VolumeId, "TargetPath", req.TargetPath,
@@ -223,8 +225,6 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	} else {
 		d.log.Info("targetPath is not mounted, just continue", "VolumeId", req.VolumeId, "TargetPath", req.TargetPath)
 	}
-
-	delete(d.volumeIdMapping, req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }

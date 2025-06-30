@@ -9,10 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/go-logr/logr"
-	"go.uber.org/zap/zapcore"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/billy99/tkm-csi/pkgs/driver"
 	"github.com/billy99/tkm-csi/pkgs/image"
@@ -50,7 +47,7 @@ func main() {
 	flag.Parse()
 
 	// Setup logging before anything else so code can log errors.
-	log := initializeLogging(logLevel)
+	log := utils.InitializeLogging(logLevel)
 
 	// Process command line variables
 	if *versionInfo {
@@ -62,7 +59,7 @@ func main() {
 	log.Info("cmdExists", "cmd", utils.TcvBinary, "err", err)
 
 	// Setup CSI Driver, which receives CSI requests from Kubelet
-	d, err := driver.NewDriver(log, nodeName, ns, socketFilename, *testMode)
+	d, err := driver.NewDriver(log, nodeName, ns, socketFilename, utils.DefaultCacheDir, *testMode)
 	if err != nil {
 		log.Error(err, "Failed to create new Driver object")
 		return
@@ -70,7 +67,7 @@ func main() {
 	log.Info("Created a new driver:", "driver", d)
 
 	// Setup Image Server, which receives OCI Image management requests from TKM
-	s, err := image.NewImageServer(nodeName, ns, imagePort, *noGpu)
+	s, err := image.NewImageServer(nodeName, ns, imagePort, utils.DefaultCacheDir, *noGpu)
 	if err != nil {
 		log.Error(err, "Failed to create new Image Server object")
 		return
@@ -111,32 +108,4 @@ func main() {
 	sig := <-c
 	log.Info("Received signal:", "sig", sig)
 	cancel()
-}
-
-func initializeLogging(logLevel string) logr.Logger {
-	var opts zap.Options
-
-	// Setup logging
-	switch logLevel {
-	case "info":
-		opts = zap.Options{
-			Development: false,
-		}
-	case "debug":
-		opts = zap.Options{
-			Development: true,
-		}
-	case "trace":
-		opts = zap.Options{
-			Development: true,
-			Level:       zapcore.Level(-2),
-		}
-	default:
-		opts = zap.Options{
-			Development: false,
-		}
-	}
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-	return ctrl.Log.WithName("tkm-csi")
 }

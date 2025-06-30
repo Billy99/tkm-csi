@@ -42,3 +42,7 @@ jobs:
 
       - name: Build Operator and Agent
         run: GOARCH=${{ matrix.arch.arch }} make build
+
+      - name: Unit Tests
+        if: ${{ matrix.arch.arch == 'amd64' && matrix.go == '1.24' }}
+        run: sudo env "PATH=$PATH" make test

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io/fs"
@@ -8,37 +9,58 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/go-logr/logr"
+	"go.uber.org/zap/zapcore"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func IsTargetBindMount(target string) (bool, error) {
-	dirInfo, err := os.Stat(target)
+func IsTargetBindMount(target string, log logr.Logger) (bool, error) {
+	tmpTarget, err := filepath.EvalSymlinks(target) // resolve symlinks
 	if err != nil {
-		return false, fmt.Errorf("error getting info for %s: %w", target, err)
+		return false, fmt.Errorf("failed to evaluate symlinks: %w", err)
 	}
 
-	parentDir := filepath.Dir(target)
-	parentInfo, err := os.Stat(parentDir)
+	file, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
-		return false, fmt.Errorf("error getting info for %s: %w", parentDir, err)
+		return false, fmt.Errorf("failed to open mountinfo: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Split on " - " separator (between optional and required fields)
+		parts := strings.Split(line, " - ")
+		if len(parts) != 2 {
+			continue // malformed line
+		}
+
+		fields := strings.Fields(parts[0])
+		if len(fields) < 5 {
+			continue
+		}
+
+		mountPoint := fields[4]
+		mountPoint, err = filepath.EvalSymlinks(mountPoint)
+		if err != nil {
+			continue
+		}
+
+		if mountPoint == tmpTarget {
+			log.V(1).Info("IsTargetBindMount(): FOUND Mount")
+			return true, nil
+		}
 	}
 
-	dirSys, ok := dirInfo.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false, fmt.Errorf("error getting syscall.Stat_t for %s", target)
+	if err := scanner.Err(); err != nil {
+		log.V(1).Info("IsTargetBindMount():Mount NOT FOUND - Scanner err")
+		return false, fmt.Errorf("error reading mountinfo: %w", err)
 	}
 
-	parentSys, ok := parentInfo.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false, fmt.Errorf("error getting syscall.Stat_t for %s", parentDir)
-	}
-
-	if dirSys.Dev != parentSys.Dev {
-		return true, nil
-	}
-
+	log.V(1).Info("IsTargetBindMount(): Mount NOT FOUND")
 	return false, nil
 }
 
@@ -91,4 +113,32 @@ func DirSize(path string) (int64, error) {
 		return nil
 	})
 	return totalSize, err
+}
+
+func InitializeLogging(logLevel string) logr.Logger {
+	var opts zap.Options
+
+	// Setup logging
+	switch logLevel {
+	case "info":
+		opts = zap.Options{
+			Development: false,
+		}
+	case "debug":
+		opts = zap.Options{
+			Development: true,
+		}
+	case "trace":
+		opts = zap.Options{
+			Development: true,
+			Level:       zapcore.Level(-2),
+		}
+	default:
+		opts = zap.Options{
+			Development: false,
+		}
+	}
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	return ctrl.Log.WithName("tkm-csi")
 }

@@ -13,18 +13,18 @@ import (
 )
 
 func (s *ImageServer) initializeFilesystem() error {
-	err := os.MkdirAll(utils.DefaultCacheDir, 0755)
+	err := os.MkdirAll(s.cacheDir, 0755)
 	if err != nil {
-		s.log.Error(err, "error creating directory", "directory", utils.DefaultCacheDir)
+		s.log.Error(err, "error creating directory", "directory", s.cacheDir)
 		return err
 	}
-	s.log.V(1).Info("Successfully created directory", "directory", utils.DefaultCacheDir)
+	s.log.V(1).Info("Successfully created directory", "directory", s.cacheDir)
 	return nil
 }
 
 func (s *ImageServer) ExtractImage(ctx context.Context, cacheImage, namespace, kernelName string) error {
 	// Build command to TCV to Extract OCI Image from URL.
-	outputDir := utils.DefaultCacheDir
+	outputDir := s.cacheDir
 	if namespace != "" {
 		outputDir = filepath.Join(outputDir, namespace)
 	}
@@ -64,8 +64,8 @@ func (s *ImageServer) RemoveImage(namespace, kernelName string) error {
 	}
 
 	// Build command to TCV to Extract OCI Image from URL.
-	parentDir := utils.DefaultCacheDir
-	outputDir := utils.DefaultCacheDir
+	parentDir := s.cacheDir
+	outputDir := s.cacheDir
 	if namespace != "" {
 		parentDir = filepath.Join(parentDir, namespace)
 		outputDir = filepath.Join(outputDir, namespace)
