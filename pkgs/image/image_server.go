@@ -21,6 +21,7 @@ type ImageServer struct {
 	NodeName  string
 	Namespace string
 	ImagePort string
+	cacheDir  string
 	TestMode  bool
 	noGpu     bool
 
@@ -78,7 +79,7 @@ func (s *ImageServer) UnloadKernelImage(ctx context.Context, req *pb.UnloadKerne
 
 // NewImageServer returns an ImageServer instance that implements gRPC endpoints
 // for TKM to manage Triton Kernel Caches that are loaded via OCI Images.
-func NewImageServer(nodeName, namespace, imagePort string, noGpu bool) (*ImageServer, error) {
+func NewImageServer(nodeName, namespace, imagePort, cacheDir string, noGpu bool) (*ImageServer, error) {
 	if !cmdExists(utils.TcvBinary) {
 		return nil, fmt.Errorf("TCV must be installed")
 	}
@@ -88,6 +89,7 @@ func NewImageServer(nodeName, namespace, imagePort string, noGpu bool) (*ImageSe
 		NodeName:   nodeName,
 		Namespace:  namespace,
 		ImagePort:  imagePort,
+		cacheDir:   cacheDir,
 		noGpu:      noGpu,
 	}, nil
 }

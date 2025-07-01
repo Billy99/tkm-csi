@@ -60,6 +60,11 @@ proto: ## Build the gRPC protobuf. This generates tkm-csi_grpc.pb.go and tkm-csi
     --go-grpc_out=. --go-grpc_opt=paths=source_relative \
     tkm-csi.proto
 
+.PHONY: test
+test: ## Run Unit Tests, use: sudo env "PATH=$PATH" make test
+	@echo === running unit test
+	env "PATH=$(PATH)" go test ./...
+
 ##@ Kind Cluster Management
 
 TKM_TAG ?= latest

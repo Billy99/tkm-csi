@@ -34,6 +34,18 @@ cd $SRC_DIR/TKM/tcv/
 make install
 ```
 
+### Run Unit Tests
+
+The TKM CSI Driver has a set of Unit Tests that are run in github CI.
+To run locally, build the binary then run the Unit Tests.
+TKM CSI Driver runs as root so it can mount files into a pod, so the Unit Tests
+also need to run as privileged.
+
+```bash
+make build
+sudo env "PATH=$PATH" make test
+```
+
 ### Test TKM CSI Driver
 
 First, launch the TKM CSI Driver.

@@ -33,4 +33,4 @@ spec:
     csi:
       driver: csi.tkm.io
       volumeAttributes:
-        csi.tkm.io/tritonKernelCache: flash-attention-rocm
+        csi.tkm.io/TKMCache: flash-attention-rocm
